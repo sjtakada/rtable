@@ -3,7 +3,6 @@
 //   Copyright (C) 2019 Toshiaki Takada
 //
 
-//use std::error::Error;
 //use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
@@ -15,11 +14,15 @@ use std::fmt;
 type V4 = Ipv4Addr;
 type V6 = Ipv6Addr;
 
+pub trait AddressLen {
+    fn address_len() -> u8;
+}
+
 // IP Prefix.
 #[derive(Debug)]
-struct Prefix<A> {
+struct Prefix<T> {
     // IP Address.
-    address: A,
+    address: T,
 
     // Prefix Length.
     len: u8,
@@ -28,35 +31,25 @@ struct Prefix<A> {
 // IPv4 Prefix specialization.
 impl Prefix<V4> {
     pub fn from_str(s: &str) -> Result<Prefix<V4>, PrefixParseError> {
-        match s.find('/') {
+        let (pos, prefix_len) = match s.find('/') {
             // Address with prefix length.
             Some(pos) => {
                 match s[pos + 1..].parse::<u8>() {
-                    Ok(prefix_len) if prefix_len <= 32 => {
-                        let address_str = &s[..pos];
-                        match Ipv4Addr::from_str(address_str) {
-                            Ok(address) =>
-                                Ok(Prefix {
-                                    address: address,
-                                    len: prefix_len,
-                                }),
-                            Err(_) => Err(PrefixParseError(())),
-                        }
-                    },
-                    _ => Err(PrefixParseError(())),
+                    Ok(prefix_len) if prefix_len <= 32 => (pos, prefix_len),
+                    _ => return Err(PrefixParseError(())),
                 }
             },
-            // Consider host address.
-            None => {
-                match Ipv4Addr::from_str(s) {
-                    Ok(address) =>
-                        Ok(Prefix {
-                            address: address,
-                            len: 32,
-                        }),
-                    Err(_) => Err(PrefixParseError(())),
-                }
-            }
+            None => (s.len(), 32),
+        };
+                    
+        let address_str = &s[..pos];
+        match V4::from_str(address_str) {
+            Ok(address) =>
+                Ok(Prefix {
+                    address: address,
+                    len: prefix_len,
+                }),
+            Err(_) => Err(PrefixParseError(())),
         }
     }
 }
@@ -70,35 +63,25 @@ impl fmt::Display for Prefix<V4> {
 // IPv6 Prefix specialization.
 impl Prefix<V6> {
     pub fn from_str(s: &str) -> Result<Prefix<V6>, PrefixParseError> {
-        match s.find('/') {
+        let (pos, prefix_len) = match s.find('/') {
             // Address with prefix length.
             Some(pos) => {
                 match s[pos + 1..].parse::<u8>() {
-                    Ok(prefix_len) if prefix_len <= 128 => {
-                        let address_str = &s[..pos];
-                        match Ipv6Addr::from_str(address_str) {
-                            Ok(address) =>
-                                Ok(Prefix {
-                                    address: address,
-                                    len: prefix_len,
-                                }),
-                            Err(_) => Err(PrefixParseError(())),
-                        }
-                    },
-                    _ => Err(PrefixParseError(())),
+                    Ok(prefix_len) if prefix_len <= 128 => (pos, prefix_len),
+                    _ => return Err(PrefixParseError(())),
                 }
             },
-            // Consider host address.
-            None => {
-                match Ipv6Addr::from_str(s) {
-                    Ok(address) =>
-                        Ok(Prefix {
-                            address: address,
-                            len: 128,
-                        }),
-                    Err(_) => Err(PrefixParseError(())),
-                }
-            }
+            None => (s.len(), 128),
+        };
+                    
+        let address_str = &s[..pos];
+        match V6::from_str(address_str) {
+            Ok(address) =>
+                Ok(Prefix {
+                    address: address,
+                    len: prefix_len,
+                }),
+            Err(_) => Err(PrefixParseError(())),
         }
     }
 }
