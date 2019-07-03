@@ -5,13 +5,13 @@
 
 use std::rc::Rc;
 
-struct Tree<P, D> {
+pub struct Tree<P, D> {
     top: Rc<Node<P, D>>,
 
     prefix: P,
 }
 
-struct Node<P, D> {
+pub struct Node<P, D> {
     parent: Rc<Node<P, D>>,
 
 //    children: [Rc<Node<P, D>>; 2],

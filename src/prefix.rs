@@ -90,7 +90,7 @@ const PLEN2MASK6: [u16; 16] = [
 
 // IP Prefix.
 #[derive(Debug)]
-struct Prefix<T> {
+pub struct Prefix<T> {
     // IP Address.
     address: T,
 
