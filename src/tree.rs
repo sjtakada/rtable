@@ -120,26 +120,38 @@ impl<P, D> Node<P, D> {
         }
     }
 
-    /*
     /// Return next Node.
-    pub fn next(&self) -> Rc<Node<P, D>> {
-        if let Some(node) = *self->childlen[Child::Left as usize].borrow() {
-            node.clone()
+    pub fn next(&self) -> Option<Rc<Node<P, D>>> {
+        if let Some(node) = self.child(Child::Left) {
+            return Some(node.clone())
         }
-        else if let Some(node) = *self->childlen[Child::Right as usize].borrow() {
-            node.clone()
+        else if let Some(node) = self.child(Child::Right) {
+            return Some(node.clone())
         }
         else {
-            let node = self;
-
-            while let Some(parent) = *self->parent.borrow() {
-                if parent->children[Child::Left as usize] == self && let Some(node) = *parent->children[Child::Right as usize].borrow() {
-                    return node.clone()
+            if let Some(parent) = self.parent() {
+                if let Some(l_child) = parent.child(Child::Left) {
+                    if l_child.as_ref() as *const _ == self as *const _ {
+                        if let Some(r_child) = parent.child(Child::Right) {
+                            return Some(r_child.clone())
+                        }
+                    }
                 }
 
-                curr = curr->parent;
+                let mut curr = parent;
+                while let Some(parent) = curr.parent() {
+                    if let Some(l_child) = parent.child(Child::Left) {
+                        if l_child.as_ref() as *const _ == curr.as_ref() as *const _ {
+                            if let Some(r_child) = parent.child(Child::Right) {
+                                return Some(r_child.clone())
+                            }
+                        }
+                    }
+                    curr = parent;
+                }
             }
         }
 
-*/
+        None
+    }
 }
