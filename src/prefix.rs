@@ -12,7 +12,9 @@ use std::str::FromStr;
 use std::error::Error;
 use std::fmt;
     
-// Trait to enhance IpAddr::*.
+///
+/// Trait to implment address_len() on IpAddr::*.
+///
 pub trait AddressLen {
     fn address_len() -> u8;
 }
@@ -29,7 +31,20 @@ impl AddressLen for Ipv6Addr {
     }
 }
 
-// Utilities.
+///
+/// Trait Prefixable.
+///
+pub trait Prefixable {
+    fn len(&self) -> u8;
+
+    fn contain(&self, prefix: &Self) -> bool {
+        true
+    }
+}
+
+///
+/// Bitmask utilities.
+///
 const PLEN2MASK: [[u8; 4]; 32] = [
     [0x00, 0x00, 0x00, 0x00],
     [0x80, 0x00, 0x00, 0x00],
@@ -88,7 +103,14 @@ const PLEN2MASK6: [u16; 16] = [
     0xfffe,
 ];
 
-// IP Prefix.
+const MASKBITS: [u8; 9] = [
+    0x00, 0x80, 0xc0, 0xe0,
+    0xf0, 0xf8, 0xfc, 0xfe, 0xff
+];
+
+///
+/// IP Prefix.
+///
 #[derive(Debug)]
 pub struct Prefix<T> {
     // IP Address.
@@ -98,7 +120,17 @@ pub struct Prefix<T> {
     len: u8,
 }
 
-// Abstract IPv4 and IPv6 both.
+// 
+impl<T> Prefixable for Prefix<T> {
+    /// Return prefix length.
+    fn len(&self) -> u8 {
+        self.len
+    }
+}
+
+///
+/// Abstract IPv4 and IPv6 both.
+///
 impl<T: AddressLen + FromStr> Prefix<T> {
     pub fn from_str(s: &str) -> Result<Prefix<T>, PrefixParseError> {
         let (pos, prefix_len) = match s.find('/') {
@@ -140,6 +172,19 @@ impl Prefix<Ipv4Addr> {
                                          octets[3] & mask[3]);
         }
     }
+
+    fn octets(&self) -> [u8; 4] {
+        self.address.octets()
+    }
+
+    /// Return 0 or 1 at certain position of bit in the prefix.
+    pub fn bit_at(&self, index: u8) -> u8 {
+        let offset = index / 8;
+        let shift = 7 - (index % 8);
+        let octets = self.octets();
+
+        (octets[offset as usize] >> shift) & 0x1
+    }
 }
 
 impl Prefix<Ipv6Addr> {
@@ -170,6 +215,48 @@ impl Prefix<Ipv6Addr> {
                                          segments[6] & mask4segment(6, self.len),
                                          segments[7] & mask4segment(7, self.len));
         }
+    }
+
+    pub fn octets(&self) -> [u8; 16] {
+        self.address.octets()
+    }
+
+
+    /// Return 0 or 1 at certain position of bit in the prefix.
+    pub fn bit_at(&self, index: u8) -> u8 {
+        let offset = index / 8;
+        let shift = 7 - (index % 8);
+        let octets = self.octets();
+
+        (octets[offset as usize] >> shift) & 0x1
+    }
+
+    /// Return true if given prefix is included in this prefix.
+    pub fn contain(&self, prefix: &Self) -> bool {
+        if self.len() > prefix.len() {
+            return false
+        }
+
+        let np = self.octets();
+        let pp = prefix.octets();
+
+        let mut offset: u8 = self.len() / 8;
+        let shift: u8 = self.len() % 8;
+
+        if shift > 0 {
+            if (MASKBITS[shift as usize] & (np[offset as usize] ^ pp[offset as usize])) > 0 {
+                return false
+            }
+        }
+
+        while offset > 0 {
+            offset -= 1;
+            if np[offset as usize] != pp[offset as usize] {
+                return false
+            }
+        }
+
+        return true
     }
 }
 

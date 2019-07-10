@@ -6,11 +6,15 @@
 use std::cell::Ref;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::iter::Iterator;
+use std::iter::IntoIterator;
+
+use super::prefix::*;
 
 ///
 /// Tree struct.
 ///
-pub struct Tree<P, D> {
+pub struct Tree<P: Prefixable, D> {
     /// Top Node.
     top: Rc<Node<P, D>>,
 
@@ -21,8 +25,99 @@ pub struct Tree<P, D> {
 ///
 /// Tree impl.
 ///
-impl<P, D> Tree<P, D> {
+impl<P: Prefixable, D> Tree<P, D> {
+    pub fn get_node(&self, prefix: &P) -> NodeIterator<P, D> {
+        let mut curr = Some(self.top.clone());
+        let mut matched: Option<Rc<Node<P, D>>> = None;
 
+        while let Some(node) = curr {
+            if node.prefix().len() <= prefix.len() && node.prefix().contain(prefix) {
+                if node.prefix().len() == prefix.len() {
+                    return NodeIterator::from_node(node)
+                }
+            }
+
+            matched = Some(node.clone());
+            curr = node.child(prefix.bit_at(curr.prefix().len()));
+        }
+
+        /*
+    NodePtr new_node;
+    NodePtr curr = top_;
+    NodePtr matched = nullptr;
+
+    while (curr
+           && curr->prefix().len() <= prefix.len()
+           && curr->prefix().match(prefix)) {
+      // Found the exact node.                                                                                                                                                                                                                
+      if (curr->prefix().len() == prefix.len())
+        return iterator(curr);
+
+      matched = curr;
+      curr = curr->child(prefix.bit_at(curr->prefix().len()));
+    }
+
+    if (curr == NULL) {
+      new_node = get_node_for(prefix);
+      if (matched)
+        matched->set_child(new_node);
+      else
+        top_ = new_node;
+    }
+    else {
+      new_node = make_shared<Node>(curr->prefix(), prefix);
+      new_node->set_child(curr);
+
+      if (matched)
+        matched->set_child(new_node);
+      else
+        top_ = new_node;
+
+      if (new_node->prefix().len() != prefix.len()) {
+        matched = new_node;
+        new_node = get_node_for(prefix);
+        matched->set_child(new_node);
+      }
+    }
+
+    return iterator(new_node);
+
+*/
+        NodeIterator::from_node(self.top.clone())
+    }
+}
+
+///
+///
+///
+impl<P: Prefixable, D> IntoIterator for Tree<P, D> {
+    type Item = Rc<Node<P, D>>;
+    type IntoIter = NodeIterator<P, D>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        NodeIterator::<P, D> {
+            node: self.top.clone()
+        }
+    }
+}
+
+pub struct NodeIterator<P: Prefixable, D> {
+    node: Rc<Node<P, D>>,
+}
+
+impl<P: Prefixable, D> NodeIterator<P, D> {
+    pub fn from_node(node: Rc<Node<P, D>>) -> NodeIterator<P, D> {
+        NodeIterator::<P, D> {
+            node: node.clone()
+        }
+    }
+}
+
+impl<P: Prefixable, D> Iterator for NodeIterator<P, D> {
+    type Item = Rc<Node<P, D>>;
+    fn next(&mut self) -> Option<Rc<Node<P, D>>> {
+        self.node.next()
+    }
 }
 
 ///
@@ -36,7 +131,7 @@ pub enum Child {
 ///
 /// Node struct.
 ///
-pub struct Node<P, D> {
+pub struct Node<P: Prefixable, D> {
     /// Parent Node.
     parent: RefCell<Option<Rc<Node<P, D>>>>,
 
@@ -53,7 +148,7 @@ pub struct Node<P, D> {
 ///
 /// Node impl.
 ///
-impl<P, D> Node<P, D> {
+impl<P: Prefixable, D> Node<P, D> {
     /// Return new node.
     pub fn new(prefix: P) -> Node<P, D> {
         Node {
@@ -120,7 +215,7 @@ impl<P, D> Node<P, D> {
         }
     }
 
-    /// Return next Node.
+    /// Return next Node.  TODO: refactoring
     pub fn next(&self) -> Option<Rc<Node<P, D>>> {
         if let Some(node) = self.child(Child::Left) {
             return Some(node.clone())
