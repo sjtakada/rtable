@@ -7,7 +7,6 @@
 
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
-use std::net::AddrParseError;
 use std::str::FromStr;
 use std::error::Error;
 use std::fmt;
@@ -35,10 +34,56 @@ impl AddressLen for Ipv6Addr {
 /// Trait Prefixable.
 ///
 pub trait Prefixable {
+    /// Construct prefix from prefix.
+    fn from_prefix(p: &Self) -> Self;
+
+    /// Construct prefix from common parts of two prefixes.
+    fn from_common(prefix1: &Self, prefix2: &Self) -> Self;
+
+    /// Return prefix length.
     fn len(&self) -> u8;
 
+    /// Return 0 or 1 at certain position of bit in the prefix.
+    fn bit_at(&self, index: u8) -> u8 {
+        let offset = index / 8;
+        let shift = 7 - (index % 8);
+        let octets = self.octets();
+
+        (octets[offset as usize] >> shift) & 0x1
+    }
+
+    /// Return reference of slice to address.
+    fn octets(&self) -> &[u8];
+
+    /// Return mutable reference of slice to address.
+    fn octets_mut(&mut self) -> &mut [u8];
+
+    /// Return true if given prefix is included in this prefix.
     fn contain(&self, prefix: &Self) -> bool {
-        true
+        if self.len() > prefix.len() {
+            return false
+        }
+
+        let np = self.octets();
+        let pp = prefix.octets();
+
+        let mut offset: u8 = self.len() / 8;
+        let shift: u8 = self.len() % 8;
+
+        if shift > 0 {
+            if (MASKBITS[shift as usize] & (np[offset as usize] ^ pp[offset as usize])) > 0 {
+                return false
+            }
+        }
+
+        while offset > 0 {
+            offset -= 1;
+            if np[offset as usize] != pp[offset as usize] {
+                return false
+            }
+        }
+
+        return true
     }
 }
 
@@ -111,7 +156,7 @@ const MASKBITS: [u8; 9] = [
 ///
 /// IP Prefix.
 ///
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Prefix<T> {
     // IP Address.
     address: T,
@@ -121,10 +166,70 @@ pub struct Prefix<T> {
 }
 
 // 
-impl<T> Prefixable for Prefix<T> {
+impl<T: AddressLen + Clone> Prefixable for Prefix<T> {
+    /// Duplicate prefix.
+    fn from_prefix(p: &Self) -> Self {
+        Self {
+            address: p.address.clone(),
+            len: p.len
+        }
+    }
+
+    /// Construct prefix from common parts of two prefixes, assuming p1 is shorter than p2.
+    fn from_common(prefix1: &Self, prefix2: &Self) -> Self {
+        let p1 = prefix1.octets();
+        let p2 = prefix2.octets();
+        let mut i = 0u8;
+        let mut j = 0u8;
+        let mut pcommon = Self::from_prefix(prefix1);
+        let px = pcommon.octets_mut();
+        let bytes = T::address_len() / 8;
+
+        while i < bytes {
+            i += 1;
+
+            let mut cp = p1[i as usize] ^ p2[i as usize];
+            if cp == 0 {
+                px[i as usize] = p1[i as usize];
+            }
+            else {
+                while (cp & 0x80) == 0 {
+                    cp = cp << 1;
+                    j += 1;
+                }
+
+                px[i as usize] = p1[i as usize] & (0xFF << (8 - j));
+                break;
+            }
+        }
+
+        pcommon.len = prefix2.len();
+        if pcommon.len > i * 8 + j {
+            pcommon.len = i * 8 + j;
+        }
+
+        pcommon
+    }
+
     /// Return prefix length.
     fn len(&self) -> u8 {
         self.len
+    }
+
+    /// Return reference of slice to address.
+    fn octets(&self) -> &[u8] {
+        let p = (&self.address as *const T) as *const u8;
+        unsafe {
+            std::slice::from_raw_parts(p, std::mem::size_of::<T>())
+        }
+    }
+
+    /// Return mutable reference of slice to address.
+    fn octets_mut(&mut self) -> &mut [u8] {
+        let p = (&mut self.address as *mut T) as *mut u8;
+        unsafe {
+            std::slice::from_raw_parts_mut(p, std::mem::size_of::<T>())
+        }
     }
 }
 
@@ -132,6 +237,7 @@ impl<T> Prefixable for Prefix<T> {
 /// Abstract IPv4 and IPv6 both.
 ///
 impl<T: AddressLen + FromStr> Prefix<T> {
+    /// Construct prefix from string slice.
     pub fn from_str(s: &str) -> Result<Prefix<T>, PrefixParseError> {
         let (pos, prefix_len) = match s.find('/') {
             // Address with prefix length.
@@ -156,12 +262,15 @@ impl<T: AddressLen + FromStr> Prefix<T> {
         }
     }
 
+    /// Return address part of prefix.
     pub fn address(&self) -> &T {
         &self.address
     }
 }
 
+/// Impl IPv4 Prefix.
 impl Prefix<Ipv4Addr> {
+    /// Apply network mask to address part.
     pub fn apply_mask(&mut self) {
         if self.len < Ipv4Addr::address_len() {
             let octets = self.address().octets();
@@ -172,22 +281,11 @@ impl Prefix<Ipv4Addr> {
                                          octets[3] & mask[3]);
         }
     }
-
-    fn octets(&self) -> [u8; 4] {
-        self.address.octets()
-    }
-
-    /// Return 0 or 1 at certain position of bit in the prefix.
-    pub fn bit_at(&self, index: u8) -> u8 {
-        let offset = index / 8;
-        let shift = 7 - (index % 8);
-        let octets = self.octets();
-
-        (octets[offset as usize] >> shift) & 0x1
-    }
 }
 
+/// Impl IPv6 Prefix .
 impl Prefix<Ipv6Addr> {
+    /// Apply network mask to address part.
     pub fn apply_mask(&mut self) {
         fn mask4segment(s: u8, len: u8) -> u16 {
             if len >= s * 16 {
@@ -216,48 +314,6 @@ impl Prefix<Ipv6Addr> {
                                          segments[7] & mask4segment(7, self.len));
         }
     }
-
-    pub fn octets(&self) -> [u8; 16] {
-        self.address.octets()
-    }
-
-
-    /// Return 0 or 1 at certain position of bit in the prefix.
-    pub fn bit_at(&self, index: u8) -> u8 {
-        let offset = index / 8;
-        let shift = 7 - (index % 8);
-        let octets = self.octets();
-
-        (octets[offset as usize] >> shift) & 0x1
-    }
-
-    /// Return true if given prefix is included in this prefix.
-    pub fn contain(&self, prefix: &Self) -> bool {
-        if self.len() > prefix.len() {
-            return false
-        }
-
-        let np = self.octets();
-        let pp = prefix.octets();
-
-        let mut offset: u8 = self.len() / 8;
-        let shift: u8 = self.len() % 8;
-
-        if shift > 0 {
-            if (MASKBITS[shift as usize] & (np[offset as usize] ^ pp[offset as usize])) > 0 {
-                return false
-            }
-        }
-
-        while offset > 0 {
-            offset -= 1;
-            if np[offset as usize] != pp[offset as usize] {
-                return false
-            }
-        }
-
-        return true
-    }
 }
 
 impl<T: AddressLen + ToString> fmt::Display for Prefix<T> {
@@ -284,6 +340,17 @@ impl Error for PrefixParseError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    pub fn test_octets() {
+        let p = Prefix::<Ipv4Addr>::from_str("1.2.3.4/24").unwrap();
+        let o = p.octets();
+        assert_eq!(o, &[1, 2, 3, 4]);
+
+        let p = Prefix::<Ipv6Addr>::from_str("2001:1:2::7:8/48").unwrap();
+        let o = p.octets();
+        assert_eq!(o, &[0x20, 1, 0, 1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 7, 0, 8]);
+    }
 
     #[test]
     pub fn test_prefix_ipv4() {

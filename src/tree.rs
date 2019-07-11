@@ -16,7 +16,7 @@ use super::prefix::*;
 ///
 pub struct Tree<P: Prefixable, D> {
     /// Top Node.
-    top: Rc<Node<P, D>>,
+    top: RefCell<Option<Rc<Node<P, D>>>>,
 
     /// Number of node in this tree.
     count: usize,
@@ -26,64 +26,63 @@ pub struct Tree<P: Prefixable, D> {
 /// Tree impl.
 ///
 impl<P: Prefixable, D> Tree<P, D> {
+    /// Get node with given prefix, create one if it doesn't exist.
     pub fn get_node(&self, prefix: &P) -> NodeIterator<P, D> {
-        let mut curr = Some(self.top.clone());
         let mut matched: Option<Rc<Node<P, D>>> = None;
+        let mut curr: Option<Rc<Node<P, D>>> = self.top.borrow_mut().clone();
+        let mut new_node: Rc<Node<P, D>>;
+        
+        // have lambda to do the loop condition.
+        let f = |curr: Option<Rc<Node<P, D>>>, prefix: &P| {
+            let node = curr.unwrap();
+            node.prefix.len() <= prefix.len() && node.prefix().contain(prefix)
+        };
 
-        while let Some(node) = curr {
-            if node.prefix().len() <= prefix.len() && node.prefix().contain(prefix) {
-                if node.prefix().len() == prefix.len() {
-                    return NodeIterator::from_node(node)
-                }
+        while curr.is_some() && f(curr.clone(), prefix) {
+            let node = curr.clone().unwrap();
+            if node.prefix().len() == prefix.len() {
+                return NodeIterator::from_node(node)
             }
 
             matched = Some(node.clone());
-            curr = node.child(prefix.bit_at(curr.prefix().len()));
+            curr = node.child_with(prefix.bit_at(node.prefix().len()));
         }
 
-        /*
-    NodePtr new_node;
-    NodePtr curr = top_;
-    NodePtr matched = nullptr;
+        match curr {
+            None => {
+                new_node = Rc::new(Node::new(prefix));
+                match matched {
+                    Some(node) => {
+                        Node::<P, D>::set_child(node, new_node.clone());
+                    },
+                    None => {
+                        self.top.replace(Some(new_node.clone()));
+                    }
+                }
 
-    while (curr
-           && curr->prefix().len() <= prefix.len()
-           && curr->prefix().match(prefix)) {
-      // Found the exact node.                                                                                                                                                                                                                
-      if (curr->prefix().len() == prefix.len())
-        return iterator(curr);
+            },
+            Some(node) => {
+                new_node = Rc::new(Node::from_common(node.prefix(), prefix));
+                Node::<P, D>::set_child(new_node.clone(), node.clone());
 
-      matched = curr;
-      curr = curr->child(prefix.bit_at(curr->prefix().len()));
-    }
+                match matched {
+                    Some(node) => {
+                        Node::<P, D>::set_child(node, new_node.clone());
+                    },
+                    None => {
+                        self.top.replace(Some(new_node.clone()));
+                    }
+                }
 
-    if (curr == NULL) {
-      new_node = get_node_for(prefix);
-      if (matched)
-        matched->set_child(new_node);
-      else
-        top_ = new_node;
-    }
-    else {
-      new_node = make_shared<Node>(curr->prefix(), prefix);
-      new_node->set_child(curr);
+                if new_node.prefix().len() != prefix.len() {
+                    matched = Some(new_node.clone());
+                    new_node = Rc::new(Node::new(prefix));
+                    Node::<P, D>::set_child(matched.unwrap().clone(), new_node.clone());
+                }
+            }
+        }
 
-      if (matched)
-        matched->set_child(new_node);
-      else
-        top_ = new_node;
-
-      if (new_node->prefix().len() != prefix.len()) {
-        matched = new_node;
-        new_node = get_node_for(prefix);
-        matched->set_child(new_node);
-      }
-    }
-
-    return iterator(new_node);
-
-*/
-        NodeIterator::from_node(self.top.clone())
+        NodeIterator::from_node(new_node)
     }
 }
 
@@ -95,20 +94,22 @@ impl<P: Prefixable, D> IntoIterator for Tree<P, D> {
     type IntoIter = NodeIterator<P, D>;
 
     fn into_iter(self) -> Self::IntoIter {
+        let top = self.top.borrow_mut().clone();
+
         NodeIterator::<P, D> {
-            node: self.top.clone()
+            node: top,
         }
     }
 }
 
 pub struct NodeIterator<P: Prefixable, D> {
-    node: Rc<Node<P, D>>,
+    node: Option<Rc<Node<P, D>>>,
 }
 
 impl<P: Prefixable, D> NodeIterator<P, D> {
     pub fn from_node(node: Rc<Node<P, D>>) -> NodeIterator<P, D> {
         NodeIterator::<P, D> {
-            node: node.clone()
+            node: Some(node.clone())
         }
     }
 }
@@ -116,7 +117,10 @@ impl<P: Prefixable, D> NodeIterator<P, D> {
 impl<P: Prefixable, D> Iterator for NodeIterator<P, D> {
     type Item = Rc<Node<P, D>>;
     fn next(&mut self) -> Option<Rc<Node<P, D>>> {
-        self.node.next()
+        match &self.node {
+            Some(node) => node.next().clone(),
+            None => None
+        }
     }
 }
 
@@ -150,13 +154,19 @@ pub struct Node<P: Prefixable, D> {
 ///
 impl<P: Prefixable, D> Node<P, D> {
     /// Return new node.
-    pub fn new(prefix: P) -> Node<P, D> {
+    pub fn new(prefix: &P) -> Node<P, D> {
         Node {
             parent: RefCell::new(None),
             children: [RefCell::new(None), RefCell::new(None)],
-            prefix: prefix,
+            prefix: P::from_prefix(prefix),
             data: RefCell::new(None),
         }
+    }
+
+    /// Return new node with common prefix.
+    pub fn from_common(prefix1: &P, prefix2: &P) -> Node<P, D> {
+        let pcommon = P::from_common(prefix1, prefix2);
+        Self::new(&pcommon)
     }
 
     /// Return reference to prefix.
@@ -169,13 +179,25 @@ impl<P: Prefixable, D> Node<P, D> {
         self.children[bit as usize].borrow().clone()
     }
 
+    /// Return one of child node - left(0) or right(1)
+    pub fn child_with(&self, bit: u8) -> Option<Rc<Node<P, D>>> {
+        self.children[bit as usize].borrow().clone()
+    }
+
     /// Return parent node.
     pub fn parent(&self) -> Option<Rc<Node<P, D>>> {
         self.parent.borrow().clone()
     }
 
+    /// Set given node as a child at left or right
+    fn set_child(parent: Rc<Node<P, D>>, child: Rc<Node<P, D>>) {
+        let bit = child.prefix().bit_at(parent.prefix().len());
+        parent.set_child_at(child.clone(), bit);
+        child.set_parent(parent.clone());
+    }
+
     /// Set child at left or right.
-    fn set_child_at(&self, child: Rc<Node<P, D>>, bit: Child) {
+    fn set_child_at(&self, child: Rc<Node<P, D>>, bit: u8) {
         self.children[bit as usize].replace(Some(child.clone()));
     }
 
