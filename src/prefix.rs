@@ -53,7 +53,7 @@ pub trait Prefixable {
     /// Construct prefix from prefix.
     fn from_prefix(p: &Self) -> Self;
 
-    /// Construct prefix from common parts of two prefixes.
+    /// Construct a prefix from common parts of two prefixes.
     fn from_common(prefix1: &Self, prefix2: &Self) -> Self;
 
     /// Return prefix length.
@@ -169,6 +169,19 @@ const MASKBITS: [u8; 9] = [
     0xf0, 0xf8, 0xfc, 0xfe, 0xff
 ];
 
+/// Get 4 u8 values from slices and return u32 in network byte order.
+fn slice_get_u32(s: &[u8], i: usize) -> u32 {
+    ((s[i] as u32) << 24) | ((s[i + 1] as u32) << 16) | ((s[i + 2] as u32) << 8) | s[i + 3] as u32
+}
+
+/// Copy 4 u8 values from one slice to another. 
+fn slice_copy_u32(s: &mut [u8], v: u32, i: usize) {
+    s[i + 0] = ((v >> 24) & 0xFF) as u8;
+    s[i + 1] = ((v >> 16) & 0xFF) as u8;
+    s[i + 2] = ((v >> 8) & 0xFF) as u8;
+    s[i + 3] = (v & 0xFF) as u8;
+}
+
 ///
 /// IP Prefix.
 ///
@@ -202,27 +215,32 @@ impl<T: AddressLen + Clone> Prefixable for Prefix<T> {
         let bytes = T::address_len() / 8;
 
         while i < bytes {
-            let mut cp: u8 = p1[i as usize] ^ p2[i as usize];
+            let l1: u32 = slice_get_u32(p1, i as usize);
+            let l2: u32 = slice_get_u32(p2, i as usize);
+            let cp: u32 = l1 ^ l2;
             if cp == 0 {
-                px[i as usize] = p1[i as usize];
+                slice_copy_u32(px, l1, i as usize);
             }
             else {
-                while (cp & 0x80) == 0 {
-                    cp = cp << 1;
-                    j += 1;
-                }
+                j = cp.leading_zeros() as u8;
+                let (mask, _) = match j {
+                    0 => (0, false),
+                    _ => 0xFFFFFFFFu32.overflowing_shl((32 - j) as u32),
+                };
+                let v = l1 & (mask as u32);
 
-                px[i as usize] = p1[i as usize] & ((0xFFu16 << (8 - j)) as u8);
+                slice_copy_u32(px, v, i as usize);
                 break;
             }
 
-            i += 1;
+            i += 4;
         }
 
-        pcommon.len = prefix2.len();
-        if pcommon.len > i * 8 + j {
-            pcommon.len = i * 8 + j;
-        }
+        pcommon.len = if prefix2.len() > i * 8 + j {
+            i * 8 + j
+        } else {
+            prefix2.len()
+        };
 
         pcommon
     }
