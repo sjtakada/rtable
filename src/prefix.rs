@@ -75,7 +75,7 @@ pub trait Prefixable {
     fn octets_mut(&mut self) -> &mut [u8];
 
     /// Return true if given prefix is included in this prefix.
-    fn contain(&self, prefix: &Self) -> bool {
+    fn contains(&self, prefix: &Self) -> bool {
         if self.len() > prefix.len() {
             return false
         }
@@ -174,7 +174,7 @@ fn slice_get_u32(s: &[u8], i: usize) -> u32 {
     ((s[i] as u32) << 24) | ((s[i + 1] as u32) << 16) | ((s[i + 2] as u32) << 8) | s[i + 3] as u32
 }
 
-/// Copy 4 u8 values from one slice to another. 
+/// Copy u32 value to slice.
 fn slice_copy_u32(s: &mut [u8], v: u32, i: usize) {
     s[i + 0] = ((v >> 24) & 0xFF) as u8;
     s[i + 1] = ((v >> 16) & 0xFF) as u8;

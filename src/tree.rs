@@ -22,6 +22,16 @@ pub struct Tree<P: Prefixable, D> {
     count: usize,
 }
 
+/// Utility function to check prefix match this node.
+fn node_match_prefix<P: Prefixable, D>(curr: Option<Rc<Node<P, D>>>, prefix: &P) -> bool {
+    match curr {
+        None => false,
+        Some(node) => {
+            node.prefix.len() <= prefix.len() && node.prefix().contains(prefix)
+        }
+    }
+}
+
 ///
 /// Tree impl.
 ///
@@ -32,13 +42,7 @@ impl<P: Prefixable, D> Tree<P, D> {
         let mut curr: Option<Rc<Node<P, D>>> = self.top.borrow_mut().clone();
         let mut new_node: Rc<Node<P, D>>;
         
-        // have lambda to do the loop condition.
-        let f = |curr: Option<Rc<Node<P, D>>>, prefix: &P| {
-            let node = curr.unwrap();
-            node.prefix.len() <= prefix.len() && node.prefix().contain(prefix)
-        };
-
-        while curr.is_some() && f(curr.clone(), prefix) {
+        while node_match_prefix(curr.clone(), prefix) {
             let node = curr.clone().unwrap();
             if node.prefix().len() == prefix.len() {
                 return NodeIterator::from_node(node)
@@ -84,10 +88,57 @@ impl<P: Prefixable, D> Tree<P, D> {
 
         NodeIterator::from_node(new_node)
     }
+
+    /// Perform exact match lookup
+    pub fn lookup_exact(&self, prefix: &P) -> NodeIterator<P, D> {
+        let mut curr = self.top.borrow_mut().clone();
+
+        while node_match_prefix(curr.clone(), prefix) {
+            let node = curr.clone().unwrap();
+            if node.prefix().len() == prefix.len() {
+                if node.has_data() {
+                    return NodeIterator::from_node(node)
+                }
+                else {
+                    break;
+                }
+            }
+
+            curr = node.child_with(prefix.bit_at(node.prefix().len()));
+        }
+
+        NodeIterator { node: None }
+    }
+
+    /// Perform longest match lookup
+    pub fn lookup(&self, prefix: &P) -> NodeIterator<P, D> {
+        let mut curr = self.top.borrow_mut().clone();
+        let mut matched: Option<Rc<Node<P, D>>> = None;
+
+        while node_match_prefix(curr.clone(), prefix) {
+            let node = curr.clone().unwrap();
+            if node.has_data() {
+                matched = Some(node.clone());
+            }
+
+            if node.prefix().len() == prefix.len() {
+                break;
+            }
+
+            curr = node.child_with(prefix.bit_at(node.prefix().len()));
+        }
+
+        if matched.is_some() {
+            NodeIterator::from_node(matched.unwrap())
+        }
+        else {
+            NodeIterator { node: None }
+        }
+    }
 }
 
 ///
-///
+/// Tree IntoIterator.
 ///
 impl<P: Prefixable, D> IntoIterator for Tree<P, D> {
     type Item = Rc<Node<P, D>>;
@@ -102,10 +153,12 @@ impl<P: Prefixable, D> IntoIterator for Tree<P, D> {
     }
 }
 
+/// NodeIterator.
 pub struct NodeIterator<P: Prefixable, D> {
     node: Option<Rc<Node<P, D>>>,
 }
 
+/// Impl NodeIterator.
 impl<P: Prefixable, D> NodeIterator<P, D> {
     pub fn from_node(node: Rc<Node<P, D>>) -> NodeIterator<P, D> {
         NodeIterator::<P, D> {
@@ -114,6 +167,7 @@ impl<P: Prefixable, D> NodeIterator<P, D> {
     }
 }
 
+/// Impl Iterator for NodeIterator.
 impl<P: Prefixable, D> Iterator for NodeIterator<P, D> {
     type Item = Rc<Node<P, D>>;
     fn next(&mut self) -> Option<Rc<Node<P, D>>> {
@@ -219,6 +273,11 @@ impl<P: Prefixable, D> Node<P, D> {
     /// Return reference to data.
     pub fn data(&self) -> Ref<Option<D>> {
         self.data.borrow()
+    }
+
+    /// Return true if node has data.
+    pub fn has_data(&self) -> bool {
+        self.data.borrow().is_some()
     }
 
     /// Return true if node has child or data.
