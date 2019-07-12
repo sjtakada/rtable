@@ -183,8 +183,12 @@ impl<P: Prefixable, D> NodeIterator<P, D> {
 impl<P: Prefixable, D> Iterator for NodeIterator<P, D> {
     type Item = Rc<Node<P, D>>;
     fn next(&mut self) -> Option<Rc<Node<P, D>>> {
-        match &self.node {
-            Some(node) => node.next().clone(),
+        let node = self.node.clone();
+        match node {
+            Some(node) => {
+                self.node = node.next().clone();
+                self.node.clone()
+            },
             None => None
         }
     }
@@ -406,19 +410,17 @@ mod tests {
 
         let d0 = Data { v: 0 };
         let pd = Prefix::<Ipv4Addr>::from_str("0.0.0.0/0").unwrap();
-        let it = tree.get_node(&pd);
+        let mut it = tree.get_node(&pd);
         it.node().unwrap().set_data(d0);
 
         let p4 = Prefix::<Ipv4Addr>::from_str("10.0.0.0/8").unwrap();
         let it = tree.lookup(&p4);
         assert_eq!(it.node().unwrap().prefix().len(), 0);
 
-        /*
         for n in tree {
             println!("{}", n.prefix().to_string());
         }
 
         assert!(false);
-         */
     }
 }
