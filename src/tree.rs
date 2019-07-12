@@ -36,6 +36,14 @@ fn node_match_prefix<P: Prefixable, D>(curr: Option<Rc<Node<P, D>>>, prefix: &P)
 /// Tree impl.
 ///
 impl<P: Prefixable, D> Tree<P, D> {
+    /// Constructor.
+    pub fn new() -> Tree<P, D> {
+        Tree {
+            top: RefCell::new(None),
+            count: 0usize,
+        }
+    }
+
     /// Get node with given prefix, create one if it doesn't exist.
     pub fn get_node(&self, prefix: &P) -> NodeIterator<P, D> {
         let mut matched: Option<Rc<Node<P, D>>> = None;
@@ -165,6 +173,10 @@ impl<P: Prefixable, D> NodeIterator<P, D> {
             node: Some(node.clone())
         }
     }
+
+    pub fn node(&self) -> Option<Rc<Node<P, D>>> {
+        self.node.clone()
+    }
 }
 
 /// Impl Iterator for NodeIterator.
@@ -260,7 +272,7 @@ impl<P: Prefixable, D> Node<P, D> {
         self.parent.replace(Some(parent.clone()));
     }
 
-    /// Set dats.
+    /// Set data.
     pub fn set_data(&self, data: D) {
         self.data.replace(Some(data));
     }
@@ -329,5 +341,84 @@ impl<P: Prefixable, D> Node<P, D> {
         }
 
         None
+    }
+}
+
+///
+/// Unit tests for Tree and Node.
+///
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::Ipv4Addr;
+
+    pub struct Data {
+        pub v: u32
+    }
+
+    #[test]
+    pub fn test_tree_ipv4() {
+        let tree = Tree::<Prefix<Ipv4Addr>, Data>::new();
+        let p1 = Prefix::<Ipv4Addr>::from_str("10.10.10.0/24").unwrap();
+        let p2 = Prefix::<Ipv4Addr>::from_str("10.10.0.0/16").unwrap();
+        let d1 = Data { v: 100 };
+        let d2 = Data { v: 200 };
+
+        let it = tree.get_node(&p1);
+        it.node().unwrap().set_data(d1);
+
+        let it = tree.get_node(&p2);
+        it.node().unwrap().set_data(d2);
+
+        let it = tree.lookup_exact(&p1);
+        let node = it.node().unwrap();
+        let data_ref = node.data();
+        match data_ref.as_ref() {
+            None => assert!(false),
+            Some(data) => assert_eq!(data.v, 100)
+        }
+
+        let it = tree.lookup_exact(&p2);
+        let node = it.node().unwrap();
+        let data_ref = node.data();
+        match data_ref.as_ref() {
+            None => assert!(false),
+            Some(data) => assert_eq!(data.v, 200)
+        }
+
+        let p3 = Prefix::<Ipv4Addr>::from_str("10.10.0.0/20").unwrap();
+        let it = tree.lookup_exact(&p3);
+        match it.node() {
+            None => { },
+            Some(data) => assert!(false)
+        }
+
+        let it = tree.lookup(&p3);
+        let node = it.node().unwrap();
+        let data_ref = node.data();
+        match data_ref.as_ref() {
+            None => assert!(false),
+            Some(data) => {
+                assert_eq!(node.prefix().len(), 16);
+                assert_eq!(data.v, 200);
+            }
+        }
+
+        let d0 = Data { v: 0 };
+        let pd = Prefix::<Ipv4Addr>::from_str("0.0.0.0/0").unwrap();
+        let it = tree.get_node(&pd);
+        it.node().unwrap().set_data(d0);
+
+        let p4 = Prefix::<Ipv4Addr>::from_str("10.0.0.0/8").unwrap();
+        let it = tree.lookup(&p4);
+        assert_eq!(it.node().unwrap().prefix().len(), 0);
+
+        /*
+        for n in tree {
+            println!("{}", n.prefix().to_string());
+        }
+
+        assert!(false);
+         */
     }
 }

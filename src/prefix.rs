@@ -356,6 +356,9 @@ impl<T: AddressLen + ToString> fmt::Display for Prefix<T> {
     }
 }
 
+///
+/// Prefix Parse Error.
+///
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PrefixParseError(());
 
@@ -371,6 +374,9 @@ impl Error for PrefixParseError {
     }
 }
 
+///
+/// Unit tests for Prefix.
+///
 #[cfg(test)]
 mod tests {
     use super::*;
