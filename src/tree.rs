@@ -192,7 +192,7 @@ impl<P: Prefixable, D> Iterator for NodeIterator<P, D> {
         match node {
             Some(node) => {
                 self.node = node.next().clone();
-                self.node.clone()
+                Some(node)
             },
             None => None
         }
