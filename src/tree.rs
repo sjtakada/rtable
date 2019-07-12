@@ -44,6 +44,11 @@ impl<P: Prefixable, D> Tree<P, D> {
         }
     }
 
+    /// Return top node.
+    pub fn top(&self) -> Option<Rc<Node<P, D>>> {
+        self.top.borrow_mut().clone()
+    }
+
     /// Get node with given prefix, create one if it doesn't exist.
     pub fn get_node(&self, prefix: &P) -> NodeIterator<P, D> {
         let mut matched: Option<Rc<Node<P, D>>> = None;
