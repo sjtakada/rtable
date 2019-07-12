@@ -12,21 +12,37 @@ use std::error::Error;
 use std::fmt;
     
 ///
-/// Trait to implment address_len() on IpAddr::*.
+/// Trait to extend IpAddr.
 ///
 pub trait AddressLen {
+    /// Return address length in bits.
     fn address_len() -> u8;
+
+    /// Construct address with all 0s.
+    fn empty_new() -> Self;
 }
 
 impl AddressLen for Ipv4Addr {
+    /// Return address length in bits.
     fn address_len() -> u8 {
         32
+    }
+
+    /// Construct address with all 0s.
+    fn empty_new() -> Self {
+        Ipv4Addr::new(0, 0, 0, 0)
     }
 }
 
 impl AddressLen for Ipv6Addr {
+    /// Return address length in bits.
     fn address_len() -> u8 {
         128
+    }
+
+    /// Construct address with all 0s.
+    fn empty_new() -> Self {
+        Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0)
     }
 }
 
@@ -181,14 +197,9 @@ impl<T: AddressLen + Clone> Prefixable for Prefix<T> {
         let p2 = prefix2.octets();
         let mut i = 0u8;
         let mut j = 0u8;
-        let mut pcommon = Self::from_prefix(prefix1);
+        let mut pcommon = Self { address: T::empty_new(), len: 0 };
         let px = pcommon.octets_mut();
         let bytes = T::address_len() / 8;
-        while i < bytes {
-            px[i as usize] = 0;
-            i += 1;
-        }
-        i = 0;
 
         while i < bytes {
             let mut cp: u8 = p1[i as usize] ^ p2[i as usize];
@@ -288,7 +299,7 @@ impl Prefix<Ipv4Addr> {
     }
 }
 
-/// Impl IPv6 Prefix .
+/// Impl IPv6 Prefix.
 impl Prefix<Ipv6Addr> {
     /// Apply network mask to address part.
     pub fn apply_mask(&mut self) {
