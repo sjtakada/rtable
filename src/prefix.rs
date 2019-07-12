@@ -175,7 +175,7 @@ impl<T: AddressLen + Clone> Prefixable for Prefix<T> {
         }
     }
 
-    /// Construct prefix from common parts of two prefixes, assuming p1 is shorter than p2.
+    /// Construct a prefix from common parts of two prefixes, assuming p1 is shorter than p2.
     fn from_common(prefix1: &Self, prefix2: &Self) -> Self {
         let p1 = prefix1.octets();
         let p2 = prefix2.octets();
@@ -184,11 +184,14 @@ impl<T: AddressLen + Clone> Prefixable for Prefix<T> {
         let mut pcommon = Self::from_prefix(prefix1);
         let px = pcommon.octets_mut();
         let bytes = T::address_len() / 8;
+        while i < bytes {
+            px[i as usize] = 0;
+            i += 1;
+        }
+        i = 0;
 
         while i < bytes {
-            i += 1;
-
-            let mut cp = p1[i as usize] ^ p2[i as usize];
+            let mut cp: u8 = p1[i as usize] ^ p2[i as usize];
             if cp == 0 {
                 px[i as usize] = p1[i as usize];
             }
@@ -198,9 +201,11 @@ impl<T: AddressLen + Clone> Prefixable for Prefix<T> {
                     j += 1;
                 }
 
-                px[i as usize] = p1[i as usize] & (0xFF << (8 - j));
+                px[i as usize] = p1[i as usize] & ((0xFFu16 << (8 - j)) as u8);
                 break;
             }
+
+            i += 1;
         }
 
         pcommon.len = prefix2.len();
@@ -358,7 +363,7 @@ mod tests {
         assert_eq!(p.address().octets(), [10, 10, 10, 0]);
         assert_eq!(p.to_string(), "10.10.10.0/24");
 
-        let mut p = Prefix::<Ipv4Addr>::from_str("1.2.3.4").unwrap();
+        let p = Prefix::<Ipv4Addr>::from_str("1.2.3.4").unwrap();
         assert_eq!(p.address().octets(), [1, 2, 3, 4]);
         assert_eq!(p.to_string(), "1.2.3.4/32");
 
@@ -378,8 +383,31 @@ mod tests {
 
         match Prefix::<Ipv4Addr>::from_str("10.10.10.10/33") {
             Ok(_) => assert!(false, "Should return error"),
-            Err(err) => { }
+            Err(_err) => { }
         }
+    }
+
+    #[test]
+    pub fn test_prefix_ipv4_common() {
+        let p1 = Prefix::<Ipv4Addr>::from_str("10.10.10.0/24").unwrap();
+        let p2 = Prefix::<Ipv4Addr>::from_str("10.10.11.0/24").unwrap();
+        let pc = Prefix::<Ipv4Addr>::from_common(&p1, &p2);
+        assert_eq!(pc.to_string(), "10.10.10.0/23");
+
+        let p1 = Prefix::<Ipv4Addr>::from_str("10.10.10.0/24").unwrap();
+        let p2 = Prefix::<Ipv4Addr>::from_str("10.10.0.0/16").unwrap();
+        let pc = Prefix::<Ipv4Addr>::from_common(&p1, &p2);
+        assert_eq!(pc.to_string(), "10.10.0.0/16");
+
+        let p1 = Prefix::<Ipv4Addr>::from_str("192.168.0.0/24").unwrap();
+        let p2 = Prefix::<Ipv4Addr>::from_str("10.10.10.0/24").unwrap();
+        let pc = Prefix::<Ipv4Addr>::from_common(&p1, &p2);
+        assert_eq!(pc.to_string(), "0.0.0.0/0");
+
+        let p1 = Prefix::<Ipv4Addr>::from_str("192.168.0.0/24").unwrap();
+        let p2 = Prefix::<Ipv4Addr>::from_str("128.10.10.0/24").unwrap();
+        let pc = Prefix::<Ipv4Addr>::from_common(&p1, &p2);
+        assert_eq!(pc.to_string(), "128.0.0.0/1");
     }
 
     #[test]
@@ -411,7 +439,7 @@ mod tests {
 
         match Prefix::<Ipv6Addr>::from_str("2001:1234::/130") {
             Ok(_) => assert!(false, "Should return error"),
-            Err(err) => { }
+            Err(_err) => { }
         }
     }
 }
