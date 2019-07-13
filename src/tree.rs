@@ -148,6 +148,58 @@ impl<P: Prefixable, D> Tree<P, D> {
             NodeIterator { node: None }
         }
     }
+
+/*
+    /// Erase a node from tree, and return iterator for next node.
+    pub fn erase(&mut self, mut it: NodeIterator<P, D>) -> NodeIterator<P, D> {
+        let next = it.next();
+
+        if let Some(node) = it.node() {
+            let has_left = node.child(Child::Left).is_some();
+            let has_right = node.child(Child::Right).is_some();
+
+            // if the node has both children, we cannot erase, this is error situation.
+            if has_left && has_right {
+                return NodeIterator { node: None }
+            }
+
+            let mut child = if has_left {
+                node.children[Child::Left as usize].replace(None)
+            } else if has_right {
+                node.children[Child::Right as usize].replace(None)
+            } else {
+                None
+            };
+
+            let parent = node.parent.clone();
+            if child.is_some() {
+                match parent {
+                    Some(parent) => child.set_parent(parent.clone()),
+                    None => child.sert_parent(None)
+                }
+            }
+
+            match parent {
+                Some(node) => {
+                    if parent.child(Child::Left) == node {
+                        parent.set_child(child, Child::Left);
+                    } else {
+                        parent.set_child(child, Child::Right);
+                    }
+                },
+                None => {
+                    self.top = Some(parent.clone());
+                }
+            }
+
+            if parent.is_some() && !parent.is_locked() {
+                self.erase(parent);
+            }
+        }
+
+        return NodeIterator { node: next }
+    }
+*/
 }
 
 ///
