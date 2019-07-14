@@ -3,8 +3,8 @@
 //   Copyright (C) 2019 Toshiaki Takada
 //
 
-use std::cell::Ref;
 use std::cell::RefCell;
+use std::cell::RefMut;
 use std::rc::Rc;
 use std::iter::Iterator;
 use std::iter::IntoIterator;
@@ -16,7 +16,7 @@ use super::prefix::*;
 ///
 pub struct Tree<P: Prefixable, D> {
     /// Top Node.
-    top: RefCell<Option<Rc<Node<P, D>>>>,
+    top: Option<Rc<Node<P, D>>>,
 
     /// Number of node in this tree.
     count: usize,
@@ -39,20 +39,20 @@ impl<P: Prefixable, D> Tree<P, D> {
     /// Constructor.
     pub fn new() -> Tree<P, D> {
         Tree {
-            top: RefCell::new(None),
+            top: None,
             count: 0usize,
         }
     }
 
     /// Return top node.
     pub fn top(&self) -> Option<Rc<Node<P, D>>> {
-        self.top.borrow_mut().clone()
+        self.top.clone()
     }
 
     /// Get node with given prefix, create one if it doesn't exist.
-    pub fn get_node(&self, prefix: &P) -> NodeIterator<P, D> {
+    pub fn get_node(&mut self, prefix: &P) -> NodeIterator<P, D> {
         let mut matched: Option<Rc<Node<P, D>>> = None;
-        let mut curr: Option<Rc<Node<P, D>>> = self.top.borrow_mut().clone();
+        let mut curr: Option<Rc<Node<P, D>>> = self.top.clone();
         let mut new_node: Rc<Node<P, D>>;
         
         while node_match_prefix(curr.clone(), prefix) {
@@ -65,7 +65,7 @@ impl<P: Prefixable, D> Tree<P, D> {
             curr = node.child_with(prefix.bit_at(node.prefix().len()));
         }
 
-        match curr {
+        match curr.clone() {
             None => {
                 new_node = Rc::new(Node::new(prefix));
                 match matched {
@@ -73,21 +73,21 @@ impl<P: Prefixable, D> Tree<P, D> {
                         Node::<P, D>::set_child(node, new_node.clone());
                     },
                     None => {
-                        self.top.replace(Some(new_node.clone()));
+                        self.top.replace(new_node.clone());
                     }
                 }
 
             },
             Some(node) => {
                 new_node = Rc::new(Node::from_common(node.prefix(), prefix));
-                Node::<P, D>::set_child(new_node.clone(), node.clone());
+                Node::<P, D>::set_child(new_node.clone(), node);
 
                 match matched {
                     Some(node) => {
                         Node::<P, D>::set_child(node, new_node.clone());
                     },
                     None => {
-                        self.top.replace(Some(new_node.clone()));
+                        self.top.replace(new_node.clone());
                     }
                 }
 
@@ -104,7 +104,7 @@ impl<P: Prefixable, D> Tree<P, D> {
 
     /// Perform exact match lookup
     pub fn lookup_exact(&self, prefix: &P) -> NodeIterator<P, D> {
-        let mut curr = self.top.borrow_mut().clone();
+        let mut curr = self.top.clone();
 
         while node_match_prefix(curr.clone(), prefix) {
             let node = curr.clone().unwrap();
@@ -125,7 +125,7 @@ impl<P: Prefixable, D> Tree<P, D> {
 
     /// Perform longest match lookup
     pub fn lookup(&self, prefix: &P) -> NodeIterator<P, D> {
-        let mut curr = self.top.borrow_mut().clone();
+        let mut curr = self.top.clone();
         let mut matched: Option<Rc<Node<P, D>>> = None;
 
         while node_match_prefix(curr.clone(), prefix) {
@@ -210,7 +210,7 @@ impl<P: Prefixable, D> IntoIterator for Tree<P, D> {
     type IntoIter = NodeIterator<P, D>;
 
     fn into_iter(self) -> Self::IntoIter {
-        let top = self.top.borrow_mut().clone();
+        let top = self.top.clone();
 
         NodeIterator::<P, D> {
             node: top,
@@ -231,8 +231,16 @@ impl<P: Prefixable, D> NodeIterator<P, D> {
         }
     }
 
-    pub fn node(&self) -> Option<Rc<Node<P, D>>> {
-        self.node.clone()
+    pub fn node(&mut self) -> &Option<Rc<Node<P, D>>> {
+        &self.node
+    }
+
+    pub fn set_data(&mut self, data: D) {
+        let node = self.node.clone();
+        match node {
+            Some(node) => node.set_data(data),
+            None => { }
+        }
     }
 }
 
@@ -303,34 +311,36 @@ impl<P: Prefixable, D> Node<P, D> {
 
     /// Return one of child node - left(0) or right(1)
     pub fn child(&self, bit: Child) -> Option<Rc<Node<P, D>>> {
-        self.children[bit as usize].borrow().clone()
+        self.children[bit as usize].borrow_mut().clone()
     }
 
     /// Return one of child node - left(0) or right(1)
     pub fn child_with(&self, bit: u8) -> Option<Rc<Node<P, D>>> {
-        self.children[bit as usize].borrow().clone()
+        self.children[bit as usize].borrow_mut().clone()
     }
 
     /// Return parent node.
     pub fn parent(&self) -> Option<Rc<Node<P, D>>> {
-        self.parent.borrow().clone()
+        self.parent.borrow_mut().clone()
     }
 
     /// Set given node as a child at left or right
     fn set_child(parent: Rc<Node<P, D>>, child: Rc<Node<P, D>>) {
         let bit = child.prefix().bit_at(parent.prefix().len());
+        //Rc::get_mut(&mut parent).unwrap().set_child_at(child.clone(), bit);
+        //Rc::get_mut(&mut child).unwrap().set_parent(parent.clone());
         parent.set_child_at(child.clone(), bit);
         child.set_parent(parent.clone());
     }
 
     /// Set child at left or right.
     fn set_child_at(&self, child: Rc<Node<P, D>>, bit: u8) {
-        self.children[bit as usize].replace(Some(child.clone()));
+        self.children[bit as usize].borrow_mut().replace(child.clone());
     }
 
     /// Set parent.
     pub fn set_parent(&self, parent: Rc<Node<P, D>>) {
-        self.parent.replace(Some(parent.clone()));
+        self.parent.borrow_mut().replace(parent.clone());
     }
 
     /// Set data.
@@ -339,32 +349,29 @@ impl<P: Prefixable, D> Node<P, D> {
     }
 
     /// Unset data.
-    pub fn unset_data(&self) {
-        self.data.replace(None);
+    pub fn unset_data(&self) -> Option<D> {
+        self.data.replace(None)
     }
 
     /// Return reference to data.
-    pub fn data(&self) -> Ref<Option<D>> {
-        self.data.borrow()
+    pub fn data(&self) -> RefMut<Option<D>> {
+        self.data.borrow_mut()
     }
 
     /// Return true if node has data.
     pub fn has_data(&self) -> bool {
-        self.data.borrow().is_some()
+        self.data.borrow_mut().is_some()
     }
 
     /// Return true if node has child or data.
     pub fn is_locked(&self) -> bool {
-        if let Some(_) = *self.children[Child::Left as usize].borrow() {
+        if self.children[Child::Left as usize].borrow_mut().is_some() {
             true
-        }
-        else if let Some(_) = *self.children[Child::Right as usize].borrow() {
+        } else if self.children[Child::Right as usize].borrow_mut().is_some() {
             true
-        }
-        else if let Some(_) = *self.data.borrow() {
+        } else if self.has_data() {
             true
-        }
-        else {
+        } else {
             false
         }
     }
@@ -419,65 +426,82 @@ mod tests {
 
     #[test]
     pub fn test_tree_ipv4() {
-        let tree = Tree::<Prefix<Ipv4Addr>, Data>::new();
+        let mut tree = Tree::<Prefix<Ipv4Addr>, Data>::new();
         let p1 = Prefix::<Ipv4Addr>::from_str("10.10.10.0/24").unwrap();
         let p2 = Prefix::<Ipv4Addr>::from_str("10.10.0.0/16").unwrap();
         let d1 = Data { v: 100 };
         let d2 = Data { v: 200 };
 
-        let it = tree.get_node(&p1);
-        it.node().unwrap().set_data(d1);
+        let mut it = tree.get_node(&p1);
+        it.set_data(d1);
 
-        let it = tree.get_node(&p2);
-        it.node().unwrap().set_data(d2);
+        let mut it = tree.get_node(&p2);
+        it.set_data(d2);
 
-        let it = tree.lookup_exact(&p1);
-        let node = it.node().unwrap();
-        let data_ref = node.data();
-        match data_ref.as_ref() {
+        let mut it = tree.lookup_exact(&p1);
+        match it.node().as_ref() {
+            Some(node) => {
+                match node.data().as_ref() {
+                    Some(data) => assert_eq!(data.v, 100),
+                    None => assert!(false),
+                }
+            },
             None => assert!(false),
-            Some(data) => assert_eq!(data.v, 100)
         }
 
-        let it = tree.lookup_exact(&p2);
-        let node = it.node().unwrap();
-        let data_ref = node.data();
-        match data_ref.as_ref() {
+        let mut it = tree.lookup_exact(&p2);
+        match it.node().as_ref() {
+            Some(node) => {
+                match node.data().as_ref() {
+                    Some(data) => assert_eq!(data.v, 200),
+                    None => assert!(false),
+                }
+            },
             None => assert!(false),
-            Some(data) => assert_eq!(data.v, 200)
         }
 
         let p3 = Prefix::<Ipv4Addr>::from_str("10.10.0.0/20").unwrap();
-        let it = tree.lookup_exact(&p3);
-        match it.node() {
+        let mut it = tree.lookup_exact(&p3);
+        match it.node().as_ref() {
             None => { },
             Some(data) => assert!(false)
         }
 
-        let it = tree.lookup(&p3);
-        let node = it.node().unwrap();
-        let data_ref = node.data();
-        match data_ref.as_ref() {
-            None => assert!(false),
-            Some(data) => {
-                assert_eq!(node.prefix().len(), 16);
-                assert_eq!(data.v, 200);
-            }
+        let mut it = tree.lookup(&p3);
+        match it.node().as_ref() {
+            Some(node) => {
+                match node.data().as_ref() {
+                    Some(data) => {
+                        assert_eq!(node.prefix().len(), 16);
+                        assert_eq!(data.v, 200);
+                    },
+                    None => assert!(false),
+                }
+            },
+            None => assert!(false)
         }
 
         let d0 = Data { v: 0 };
         let pd = Prefix::<Ipv4Addr>::from_str("0.0.0.0/0").unwrap();
         let mut it = tree.get_node(&pd);
-        it.node().unwrap().set_data(d0);
+        match it.node().as_ref() {
+            Some(node) => node.set_data(d0),
+            None => assert!(false),
+        }
 
         let p4 = Prefix::<Ipv4Addr>::from_str("10.0.0.0/8").unwrap();
-        let it = tree.lookup(&p4);
-        assert_eq!(it.node().unwrap().prefix().len(), 0);
+        let mut it = tree.lookup(&p4);
+        match it.node().as_ref() {
+            Some(node) => assert_eq!(node.prefix().len(), 0),
+            None => assert!(false),
+        }
 
+/*
         for n in tree {
             println!("{}", n.prefix().to_string());
         }
 
         assert!(false);
+*/
     }
 }
