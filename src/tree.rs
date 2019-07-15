@@ -149,57 +149,64 @@ impl<P: Prefixable, D> Tree<P, D> {
         }
     }
 
-/*
     /// Erase a node from tree, and return iterator for next node.
-    pub fn erase(&mut self, mut it: NodeIterator<P, D>) -> NodeIterator<P, D> {
-        let next = it.next();
+    pub fn erase(&mut self, it: NodeIterator<P, D>) -> NodeIterator<P, D> {
+        let curr = it.node();
+        let next = match curr {
+            Some(node) => node.next(),
+            None => None
+        };
 
-        if let Some(node) = it.node() {
-            let has_left = node.child(Child::Left).is_some();
-            let has_right = node.child(Child::Right).is_some();
+        if let Some(target) = curr {
+            let has_left = target.child(Child::Left).is_some();
+            let has_right = target.child(Child::Right).is_some();
 
             // if the node has both children, we cannot erase, this is error situation.
             if has_left && has_right {
                 return NodeIterator { node: None }
             }
 
-            let mut child = if has_left {
-                node.children[Child::Left as usize].replace(None)
+            let child = if has_left {
+                target.children[Child::Left as usize].replace(None)
             } else if has_right {
-                node.children[Child::Right as usize].replace(None)
+                target.children[Child::Right as usize].replace(None)
             } else {
                 None
             };
 
-            let parent = node.parent.clone();
+            let parent = target.parent().clone();
             if child.is_some() {
                 match parent {
-                    Some(parent) => child.set_parent(parent.clone()),
-                    None => child.sert_parent(None)
+                    Some(parent) => child.clone().unwrap().set_parent(parent.clone()),
+                    None => child.clone().unwrap().unset_parent()
                 }
             }
 
+            let parent = target.parent().clone();
             match parent {
                 Some(node) => {
-                    if parent.child(Child::Left) == node {
-                        parent.set_child(child, Child::Left);
+                    if same_object(node.child(Child::Left).unwrap().as_ref(), target.as_ref()) {
+                        node.set_child_at(child.unwrap(), Child::Left as u8);
                     } else {
-                        parent.set_child(child, Child::Right);
+                        node.set_child_at(child.unwrap(), Child::Right as u8);
                     }
                 },
                 None => {
-                    self.top = Some(parent.clone());
+                    self.top = child.clone();
                 }
             }
 
-            if parent.is_some() && !parent.is_locked() {
-                self.erase(parent);
+            let parent = target.parent().clone();
+            if parent.is_some() {
+                let node = parent.clone().unwrap();
+                if !node.is_locked() {
+                    self.erase(NodeIterator { node: parent });
+                }
             }
         }
 
         return NodeIterator { node: next }
     }
-*/
 }
 
 ///
@@ -231,7 +238,7 @@ impl<P: Prefixable, D> NodeIterator<P, D> {
         }
     }
 
-    pub fn node(&mut self) -> &Option<Rc<Node<P, D>>> {
+    pub fn node(&self) -> &Option<Rc<Node<P, D>>> {
         &self.node
     }
 
@@ -265,6 +272,10 @@ impl<P: Prefixable, D> Iterator for NodeIterator<P, D> {
 pub enum Child {
     Left = 0,
     Right = 1,
+}
+
+fn same_object<T>(a: *const T, b: *const T) -> bool {
+    a == b
 }
 
 ///
@@ -327,8 +338,6 @@ impl<P: Prefixable, D> Node<P, D> {
     /// Set given node as a child at left or right
     fn set_child(parent: Rc<Node<P, D>>, child: Rc<Node<P, D>>) {
         let bit = child.prefix().bit_at(parent.prefix().len());
-        //Rc::get_mut(&mut parent).unwrap().set_child_at(child.clone(), bit);
-        //Rc::get_mut(&mut child).unwrap().set_parent(parent.clone());
         parent.set_child_at(child.clone(), bit);
         child.set_parent(parent.clone());
     }
@@ -340,7 +349,12 @@ impl<P: Prefixable, D> Node<P, D> {
 
     /// Set parent.
     pub fn set_parent(&self, parent: Rc<Node<P, D>>) {
-        self.parent.borrow_mut().replace(parent.clone());
+        self.parent.replace(Some(parent.clone()));
+    }
+
+    /// Unset parent.
+    pub fn unset_parent(&self) {
+        self.parent.replace(None);
     }
 
     /// Set data.
@@ -496,12 +510,14 @@ mod tests {
             None => assert!(false),
         }
 
-/*
+
+        let mut it = tree.lookup(&p3);
+        tree.erase(it);
+
         for n in tree {
             println!("{}", n.prefix().to_string());
         }
 
         assert!(false);
-*/
     }
 }
