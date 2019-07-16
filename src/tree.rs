@@ -32,6 +32,10 @@ fn node_match_prefix<P: Prefixable, D>(curr: Option<Rc<Node<P, D>>>, prefix: &P)
     }
 }
 
+fn same_object<T>(a: *const T, b: *const T) -> bool {
+    a == b
+}
+
 ///
 /// Tree impl.
 ///
@@ -147,10 +151,6 @@ impl<P: Prefixable, D> Tree<P, D> {
         else {
             NodeIterator { node: None }
         }
-    }
-
-    fn same_object<T>(a: *const T, b: *const T) -> bool {
-        a == b
     }
 
     /// Erase a node from tree, and return iterator for next node.
