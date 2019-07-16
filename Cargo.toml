@@ -3,6 +3,12 @@ name = "rtable"
 version = "0.1.0"
 authors = ["Toshiaki Takada <toshiaki.takada@gmail.com>"]
 edition = "2018"
+description = "Generic Routing Table Library with Radix Tree"
+repository = "https://github.com/sjtakada/rtable"
+readme = "README.md"
+keywords = ["rtable", "routing", "router"]
+license = "GPL-3.0-or-later"
+categories = ["data-structures", "network-programming"]
 
 [dependencies]
 
