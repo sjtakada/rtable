@@ -438,6 +438,12 @@ mod tests {
         pub v: u32
     }
 
+    impl Data {
+        fn new(v: u32) -> Rc<Data> {
+            Rc::new(Data { v: v })
+        }
+    }
+
     type RouteTableIpv4 = Tree<Prefix<Ipv4Addr>, Rc<Data>>;
 
     fn route_ipv4_add(tree: &mut RouteTableIpv4,
@@ -457,7 +463,7 @@ mod tests {
         Ok(())
     }
 
-    fn route_ipv4_lookup<'a>(tree: &RouteTableIpv4, prefix_str: &str) -> Result<Option<(Rc<Data>, Prefix<Ipv4Addr>)>, PrefixParseError> {
+    fn route_ipv4_lookup(tree: &RouteTableIpv4, prefix_str: &str) -> Result<Option<(Rc<Data>, Prefix<Ipv4Addr>)>, PrefixParseError> {
         let p = Prefix::<Ipv4Addr>::from_str(prefix_str)?;
         let it = tree.lookup(&p);
 
@@ -486,11 +492,9 @@ mod tests {
     #[test]
     pub fn test_tree_ipv4() {
         let mut tree = RouteTableIpv4::new();
-        let d1 = Rc::new(Data { v: 100 });
-        let d2 = Rc::new(Data { v: 200 });
 
-        route_ipv4_add(&mut tree, "10.10.10.0/24", d1).expect("Route add error");
-        route_ipv4_add(&mut tree, "10.10.0.0/16", d2).expect("Route add error");
+        route_ipv4_add(&mut tree, "10.10.10.0/24", Data::new(100)).expect("Route add error");
+        route_ipv4_add(&mut tree, "10.10.0.0/16", Data::new(200)).expect("Route add error");
 
         match route_ipv4_lookup(&tree, "10.10.10.0/24").expect("Route lookup error") {
             Some((data, _)) => assert_eq!(data.v, 100),
@@ -515,8 +519,7 @@ mod tests {
             None => assert!(false),
         }
 
-        let d0 = Rc::new(Data { v: 0 });
-        route_ipv4_add(&mut tree, "0.0.0.0/0", d0).expect("Route add error");
+        route_ipv4_add(&mut tree, "0.0.0.0/0", Data::new(0)).expect("Route add error");
 
         match route_ipv4_lookup(&tree, "10.0.0.0/8").expect("Route lookup error") {
             Some((_data, p)) => {
@@ -527,9 +530,23 @@ mod tests {
 
         route_ipv4_delete(&mut tree, "10.10.0.0/20").expect("Route delete error");
 
-        //for n in tree {
-        //println!("{}", n.prefix().to_string());
-        //}
-        //assert!(false);
+
+        route_ipv4_add(&mut tree, "1.1.1.1/32", Data::new(0)).expect("Route add error");
+        route_ipv4_add(&mut tree, "192.168.1.0/24", Data::new(0)).expect("Route add error");
+
+        route_ipv4_add(&mut tree, "127.0.0.0/8", Data::new(0)).expect("Route add error");
+        route_ipv4_add(&mut tree, "20.20.0.0/20", Data::new(0)).expect("Route add error");
+        route_ipv4_add(&mut tree, "64.64.64.128/25", Data::new(0)).expect("Route add error");
+
+        for n in tree {
+            let data = n.data().clone();
+            match data {
+                Some(data) =>
+                    println!("{} {}", n.prefix().to_string(), data.v),
+                None =>
+                    println!("{} -", n.prefix().to_string()),
+            }
+        }
+        assert!(false);
     }
 }
