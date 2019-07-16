@@ -32,6 +32,10 @@ fn node_match_prefix<P: Prefixable, D>(curr: Option<Rc<Node<P, D>>>, prefix: &P)
     }
 }
 
+fn same_object<T>(a: *const T, b: *const T) -> bool {
+    a == b
+}
+
 ///
 /// Tree impl.
 ///
@@ -274,10 +278,6 @@ pub enum Child {
     Right = 1,
 }
 
-fn same_object<T>(a: *const T, b: *const T) -> bool {
-    a == b
-}
-
 ///
 /// Node struct.
 ///
@@ -438,86 +438,115 @@ mod tests {
         pub v: u32
     }
 
-    #[test]
-    pub fn test_tree_ipv4() {
-        let mut tree = Tree::<Prefix<Ipv4Addr>, Data>::new();
-        let p1 = Prefix::<Ipv4Addr>::from_str("10.10.10.0/24").unwrap();
-        let p2 = Prefix::<Ipv4Addr>::from_str("10.10.0.0/16").unwrap();
-        let d1 = Data { v: 100 };
-        let d2 = Data { v: 200 };
-
-        let mut it = tree.get_node(&p1);
-        it.set_data(d1);
-
-        let mut it = tree.get_node(&p2);
-        it.set_data(d2);
-
-        let mut it = tree.lookup_exact(&p1);
-        match it.node().as_ref() {
-            Some(node) => {
-                match node.data().as_ref() {
-                    Some(data) => assert_eq!(data.v, 100),
-                    None => assert!(false),
-                }
-            },
-            None => assert!(false),
+    impl Data {
+        fn new(v: u32) -> Rc<Data> {
+            Rc::new(Data { v: v })
         }
+    }
 
-        let mut it = tree.lookup_exact(&p2);
-        match it.node().as_ref() {
-            Some(node) => {
-                match node.data().as_ref() {
-                    Some(data) => assert_eq!(data.v, 200),
-                    None => assert!(false),
-                }
-            },
-            None => assert!(false),
-        }
+    type RouteTableIpv4 = Tree<Prefix<Ipv4Addr>, Rc<Data>>;
 
-        let p3 = Prefix::<Ipv4Addr>::from_str("10.10.0.0/20").unwrap();
-        let mut it = tree.lookup_exact(&p3);
-        match it.node().as_ref() {
-            None => { },
-            Some(data) => assert!(false)
-        }
+    fn route_ipv4_add(tree: &mut RouteTableIpv4,
+                      prefix_str: &str, d: Rc<Data>) -> Result<(), PrefixParseError> {
+        let p = Prefix::<Ipv4Addr>::from_str(prefix_str)?;
+        let mut it = tree.get_node(&p);
+        it.set_data(d);
 
-        let mut it = tree.lookup(&p3);
-        match it.node().as_ref() {
-            Some(node) => {
-                match node.data().as_ref() {
-                    Some(data) => {
-                        assert_eq!(node.prefix().len(), 16);
-                        assert_eq!(data.v, 200);
-                    },
-                    None => assert!(false),
-                }
-            },
-            None => assert!(false)
-        }
+        Ok(())
+    }
 
-        let d0 = Data { v: 0 };
-        let pd = Prefix::<Ipv4Addr>::from_str("0.0.0.0/0").unwrap();
-        let mut it = tree.get_node(&pd);
-        match it.node().as_ref() {
-            Some(node) => node.set_data(d0),
-            None => assert!(false),
-        }
-
-        let p4 = Prefix::<Ipv4Addr>::from_str("10.0.0.0/8").unwrap();
-        let mut it = tree.lookup(&p4);
-        match it.node().as_ref() {
-            Some(node) => assert_eq!(node.prefix().len(), 0),
-            None => assert!(false),
-        }
-
-
-        let mut it = tree.lookup(&p3);
+    fn route_ipv4_delete(tree: &mut RouteTableIpv4, prefix_str: &str) -> Result<(), PrefixParseError> {
+        let p = Prefix::<Ipv4Addr>::from_str(prefix_str)?;
+        let it = tree.lookup(&p);
         tree.erase(it);
 
-        for n in tree {
-            println!("{}", n.prefix().to_string());
+        Ok(())
+    }
+
+    fn route_ipv4_lookup(tree: &RouteTableIpv4, prefix_str: &str) -> Result<Option<(Rc<Data>, Prefix<Ipv4Addr>)>, PrefixParseError> {
+        let p = Prefix::<Ipv4Addr>::from_str(prefix_str)?;
+        let it = tree.lookup(&p);
+
+        match it.node().as_ref() {
+            Some(node) => {
+                let data = node.data().clone();
+                match data {
+                    Some(data) => Ok(Some((data.clone(), node.prefix().clone()))),
+                    None => Ok(None)
+                }
+            },
+            None => Ok(None)
+        }
+    }
+
+    fn route_ipv4_lookup_exact<'a>(tree: &RouteTableIpv4, prefix_str: &str) -> Result<Option<Rc<Data>>, PrefixParseError> {
+        let p = Prefix::<Ipv4Addr>::from_str(prefix_str)?;
+        let it = tree.lookup_exact(&p);
+
+        match it.node().as_ref() {
+            Some(node) => Ok(node.data().clone()),
+            None => Ok(None)
+        }
+    }
+
+    #[test]
+    pub fn test_tree_ipv4() {
+        let mut tree = RouteTableIpv4::new();
+
+        route_ipv4_add(&mut tree, "10.10.10.0/24", Data::new(100)).expect("Route add error");
+        route_ipv4_add(&mut tree, "10.10.0.0/16", Data::new(200)).expect("Route add error");
+
+        match route_ipv4_lookup(&tree, "10.10.10.0/24").expect("Route lookup error") {
+            Some((data, _)) => assert_eq!(data.v, 100),
+            None => assert!(false),
         }
 
+        match route_ipv4_lookup_exact(&tree, "10.10.0.0/16").expect("Route lookup error") {
+            Some(data) => assert_eq!(data.v, 200),
+            None => assert!(false),
+        }
+
+        match route_ipv4_lookup_exact(&tree, "10.10.0.0/20").expect("Route lookup error") {
+            Some(_data) => assert!(false),
+            None => { },
+        }
+
+        match route_ipv4_lookup(&tree, "10.10.0.0/20").expect("Route lookup error") {
+            Some((data, p)) => {
+                assert_eq!(p.len(), 16);
+                assert_eq!(data.v, 200);
+            },
+            None => assert!(false),
+        }
+
+        route_ipv4_add(&mut tree, "0.0.0.0/0", Data::new(0)).expect("Route add error");
+
+        match route_ipv4_lookup(&tree, "10.0.0.0/8").expect("Route lookup error") {
+            Some((_data, p)) => {
+                assert_eq!(p.len(), 0);
+            },
+            None => assert!(false),
+        }
+
+        route_ipv4_delete(&mut tree, "10.10.0.0/20").expect("Route delete error");
+
+
+        route_ipv4_add(&mut tree, "1.1.1.1/32", Data::new(0)).expect("Route add error");
+        route_ipv4_add(&mut tree, "192.168.1.0/24", Data::new(0)).expect("Route add error");
+
+        route_ipv4_add(&mut tree, "127.0.0.0/8", Data::new(0)).expect("Route add error");
+        route_ipv4_add(&mut tree, "20.20.0.0/20", Data::new(0)).expect("Route add error");
+        route_ipv4_add(&mut tree, "64.64.64.128/25", Data::new(0)).expect("Route add error");
+
+        for n in tree {
+            let data = n.data().clone();
+            match data {
+                Some(data) =>
+                    println!("{} {}", n.prefix().to_string(), data.v),
+                None =>
+                    println!("{} -", n.prefix().to_string()),
+            }
+        }
         assert!(false);
     }
 }

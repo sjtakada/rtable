@@ -22,6 +22,7 @@ pub trait AddressLen {
     fn empty_new() -> Self;
 }
 
+/// Trait implementation for Ipv4Addr.
 impl AddressLen for Ipv4Addr {
     /// Return address length in bits.
     fn address_len() -> u8 {
@@ -34,6 +35,7 @@ impl AddressLen for Ipv4Addr {
     }
 }
 
+/// Trait implementation for Ipv6Addr.
 impl AddressLen for Ipv6Addr {
     /// Return address length in bits.
     fn address_len() -> u8 {
@@ -50,7 +52,7 @@ impl AddressLen for Ipv6Addr {
 /// Trait Prefixable.
 ///
 pub trait Prefixable {
-    /// Construct prefix from prefix.
+    /// Construct a prefix from given prefix.
     fn from_prefix(p: &Self) -> Self;
 
     /// Construct a prefix from common parts of two prefixes.
@@ -83,18 +85,18 @@ pub trait Prefixable {
         let np = self.octets();
         let pp = prefix.octets();
 
-        let mut offset: u8 = self.len() / 8;
-        let shift: u8 = self.len() % 8;
+        let mut offset: usize = self.len() as usize / 8;
+        let shift: usize = self.len() as usize % 8;
 
         if shift > 0 {
-            if (MASKBITS[shift as usize] & (np[offset as usize] ^ pp[offset as usize])) > 0 {
+            if (MASKBITS[shift] & (np[offset] ^ pp[offset])) > 0 {
                 return false
             }
         }
 
         while offset > 0 {
             offset -= 1;
-            if np[offset as usize] != pp[offset as usize] {
+            if np[offset] != pp[offset] {
                 return false
             }
         }
@@ -196,7 +198,7 @@ pub struct Prefix<T> {
 
 // 
 impl<T: AddressLen + Clone> Prefixable for Prefix<T> {
-    /// Duplicate prefix.
+    /// Construct a prefix from given prefix.
     fn from_prefix(p: &Self) -> Self {
         Self {
             address: p.address.clone(),
