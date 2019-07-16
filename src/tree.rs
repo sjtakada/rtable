@@ -149,6 +149,10 @@ impl<P: Prefixable, D> Tree<P, D> {
         }
     }
 
+    fn same_object<T>(a: *const T, b: *const T) -> bool {
+        a == b
+    }
+
     /// Erase a node from tree, and return iterator for next node.
     pub fn erase(&mut self, it: NodeIterator<P, D>) -> NodeIterator<P, D> {
         let curr = it.node();
@@ -272,10 +276,6 @@ impl<P: Prefixable, D> Iterator for NodeIterator<P, D> {
 pub enum Child {
     Left = 0,
     Right = 1,
-}
-
-fn same_object<T>(a: *const T, b: *const T) -> bool {
-    a == b
 }
 
 ///
