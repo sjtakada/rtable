@@ -457,12 +457,18 @@ mod tests {
         Ok(())
     }
 
-    fn route_ipv4_lookup<'a>(tree: &RouteTableIpv4, prefix_str: &str) -> Result<Option<Rc<Data>>, PrefixParseError> {
+    fn route_ipv4_lookup<'a>(tree: &RouteTableIpv4, prefix_str: &str) -> Result<Option<(Rc<Data>, Prefix<Ipv4Addr>)>, PrefixParseError> {
         let p = Prefix::<Ipv4Addr>::from_str(prefix_str)?;
         let it = tree.lookup(&p);
 
         match it.node().as_ref() {
-            Some(node) => Ok(node.data().clone()),
+            Some(node) => {
+                let data = node.data().clone();
+                match data {
+                    Some(data) => Ok(Some((data.clone(), node.prefix().clone()))),
+                    None => Ok(None)
+                }
+            },
             None => Ok(None)
         }
     }
@@ -487,7 +493,7 @@ mod tests {
         route_ipv4_add(&mut tree, "10.10.0.0/16", d2).expect("Route add error");
 
         match route_ipv4_lookup(&tree, "10.10.10.0/24").expect("Route lookup error") {
-            Some(data) => assert_eq!(data.v, 100),
+            Some((data, _)) => assert_eq!(data.v, 100),
             None => assert!(false),
         }
 
@@ -502,8 +508,8 @@ mod tests {
         }
 
         match route_ipv4_lookup(&tree, "10.10.0.0/20").expect("Route lookup error") {
-            Some(data) => {
-                //assert_eq!(node.prefix().len(), 16);
+            Some((data, p)) => {
+                assert_eq!(p.len(), 16);
                 assert_eq!(data.v, 200);
             },
             None => assert!(false),
@@ -512,19 +518,18 @@ mod tests {
         let d0 = Rc::new(Data { v: 0 });
         route_ipv4_add(&mut tree, "0.0.0.0/0", d0).expect("Route add error");
 
-        let p4 = Prefix::<Ipv4Addr>::from_str("10.0.0.0/8").unwrap();
-        let it = tree.lookup(&p4);
-        match it.node().as_ref() {
-            Some(node) => assert_eq!(node.prefix().len(), 0),
+        match route_ipv4_lookup(&tree, "10.0.0.0/8").expect("Route lookup error") {
+            Some((_data, p)) => {
+                assert_eq!(p.len(), 0);
+            },
             None => assert!(false),
         }
 
         route_ipv4_delete(&mut tree, "10.10.0.0/20").expect("Route delete error");
 
-        for n in tree {
-            println!("{}", n.prefix().to_string());
-        }
-
-        assert!(false);
+        //for n in tree {
+        //println!("{}", n.prefix().to_string());
+        //}
+        //assert!(false);
     }
 }
