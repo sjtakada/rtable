@@ -530,7 +530,6 @@ mod tests {
 
         route_ipv4_delete(&mut tree, "10.10.0.0/20").expect("Route delete error");
 
-
         route_ipv4_add(&mut tree, "1.1.1.1/32", Data::new(0)).expect("Route add error");
         route_ipv4_add(&mut tree, "192.168.1.0/24", Data::new(0)).expect("Route add error");
 
@@ -538,17 +537,7 @@ mod tests {
         route_ipv4_add(&mut tree, "20.20.0.0/20", Data::new(0)).expect("Route add error");
         route_ipv4_add(&mut tree, "64.64.64.128/25", Data::new(0)).expect("Route add error");
 
-        /*
-        for n in tree {
-            let data = n.data().clone();
-            match data {
-                Some(data) =>
-                    println!("{} {}", n.prefix().to_string(), data.v),
-                None =>
-                    println!("{} -", n.prefix().to_string()),
-            }
-        }
-        assert!(false);
-         */
+        let v: Vec<_> = tree.into_iter().map(|n| n.prefix().to_string()).collect();
+        assert_eq!(v, &["0.0.0.0/0", "0.0.0.0/1", "0.0.0.0/3", "0.0.0.0/4", "1.1.1.1/32", "10.10.10.0/24", "20.20.0.0/20", "64.0.0.0/2", "64.64.64.128/25", "127.0.0.0/8", "192.168.1.0/24"]);
     }
 }
