@@ -218,12 +218,12 @@ impl<P: Prefixable, D> Tree<P, D> {
 ///
 impl<P: Prefixable, D> IntoIterator for Tree<P, D> {
     type Item = Rc<Node<P, D>>;
-    type IntoIter = NodeIterator<P, D>;
+    type IntoIter = DataIterator<P, D>;
 
     fn into_iter(self) -> Self::IntoIter {
         let top = self.top.clone();
 
-        NodeIterator::<P, D> {
+        DataIterator::<P, D> {
             node: top,
         }
     }
@@ -264,6 +264,45 @@ impl<P: Prefixable, D> Iterator for NodeIterator<P, D> {
             Some(node) => {
                 self.node = node.next().clone();
                 Some(node)
+            },
+            None => None
+        }
+    }
+}
+
+/// DataIterator, only iterate node with data.
+pub struct DataIterator<P: Prefixable, D> {
+    node: Option<Rc<Node<P, D>>>,
+}
+
+/// Impl DataIterator.
+impl<P: Prefixable, D> DataIterator<P, D> {
+    pub fn node(&self) -> &Option<Rc<Node<P, D>>> {
+        &self.node
+    }
+}
+
+/// Impl Iterator for DataIterator.
+impl<P: Prefixable, D> Iterator for DataIterator<P, D> {
+    type Item = Rc<Node<P, D>>;
+    fn next(&mut self) -> Option<Rc<Node<P, D>>> {
+        let node = self.node.clone();
+        match node {
+            Some(node) => {
+                if !node.has_data() {
+                    let node = node.next_with_data().clone();
+                    match node {
+                        Some(node) => {
+                            self.node = node.next_with_data().clone();
+                            Some(node)
+                        },
+                        None => return None
+                    }
+                }
+                else {
+                    self.node = node.next_with_data().clone();
+                    Some(node)
+                }
             },
             None => None
         }
@@ -424,6 +463,20 @@ impl<P: Prefixable, D> Node<P, D> {
 
         None
     }
+
+    /// Return next Node with data.
+    pub fn next_with_data(&self) -> Option<Rc<Node<P, D>>> {
+        let mut next = self.next();
+
+        while let Some(node) = next {
+            if node.has_data() {
+                return Some(node)
+            }
+            next = node.next();
+        }
+
+        None
+    }
 }
 
 ///
@@ -538,6 +591,7 @@ mod tests {
         route_ipv4_add(&mut tree, "64.64.64.128/25", Data::new(0)).expect("Route add error");
 
         let v: Vec<_> = tree.into_iter().map(|n| n.prefix().to_string()).collect();
-        assert_eq!(v, &["0.0.0.0/0", "0.0.0.0/1", "0.0.0.0/3", "0.0.0.0/4", "1.1.1.1/32", "10.10.10.0/24", "20.20.0.0/20", "64.0.0.0/2", "64.64.64.128/25", "127.0.0.0/8", "192.168.1.0/24"]);
+        assert_eq!(v, &["0.0.0.0/0", "1.1.1.1/32", "10.10.10.0/24", "20.20.0.0/20", "64.64.64.128/25", "127.0.0.0/8", "192.168.1.0/24"]);
+//        assert_eq!(v, &["0.0.0.0/0", "0.0.0.0/1", "0.0.0.0/3", "0.0.0.0/4", "1.1.1.1/32", "10.10.10.0/24", "20.20.0.0/20", "64.0.0.0/2", "64.64.64.128/25", "127.0.0.0/8", "192.168.1.0/24"]);
     }
 }
