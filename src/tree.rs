@@ -211,12 +211,19 @@ impl<P: Prefixable, D> Tree<P, D> {
 
         return NodeIterator { node: next }
     }
+
+    /// Return node iterator.
+    pub fn node_iter(&self) -> NodeIterator<P, D> {
+        NodeIterator::<P, D> {
+            node: self.top.clone()
+        }
+    }
 }
 
 ///
 /// Tree IntoIterator.
 ///
-impl<P: Prefixable, D> IntoIterator for Tree<P, D> {
+impl<P: Prefixable, D> IntoIterator for &Tree<P, D> {
     type Item = Rc<Node<P, D>>;
     type IntoIter = DataIterator<P, D>;
 
@@ -592,6 +599,8 @@ mod tests {
 
         let v: Vec<_> = tree.into_iter().map(|n| n.prefix().to_string()).collect();
         assert_eq!(v, &["0.0.0.0/0", "1.1.1.1/32", "10.10.10.0/24", "20.20.0.0/20", "64.64.64.128/25", "127.0.0.0/8", "192.168.1.0/24"]);
-//        assert_eq!(v, &["0.0.0.0/0", "0.0.0.0/1", "0.0.0.0/3", "0.0.0.0/4", "1.1.1.1/32", "10.10.10.0/24", "20.20.0.0/20", "64.0.0.0/2", "64.64.64.128/25", "127.0.0.0/8", "192.168.1.0/24"]);
+
+        let v: Vec<_> = tree.node_iter().map(|n| n.prefix().to_string()).collect();
+        assert_eq!(v, &["0.0.0.0/0", "0.0.0.0/1", "0.0.0.0/3", "0.0.0.0/4", "1.1.1.1/32", "10.10.10.0/24", "20.20.0.0/20", "64.0.0.0/2", "64.64.64.128/25", "127.0.0.0/8", "192.168.1.0/24"]);
     }
 }
