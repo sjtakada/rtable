@@ -211,19 +211,26 @@ impl<P: Prefixable, D> Tree<P, D> {
 
         return NodeIterator { node: next }
     }
+
+    /// Return node iterator.
+    pub fn node_iter(&self) -> NodeIterator<P, D> {
+        NodeIterator::<P, D> {
+            node: self.top.clone()
+        }
+    }
 }
 
 ///
 /// Tree IntoIterator.
 ///
-impl<P: Prefixable, D> IntoIterator for Tree<P, D> {
+impl<P: Prefixable, D> IntoIterator for &Tree<P, D> {
     type Item = Rc<Node<P, D>>;
-    type IntoIter = NodeIterator<P, D>;
+    type IntoIter = DataIterator<P, D>;
 
     fn into_iter(self) -> Self::IntoIter {
         let top = self.top.clone();
 
-        NodeIterator::<P, D> {
+        DataIterator::<P, D> {
             node: top,
         }
     }
@@ -264,6 +271,45 @@ impl<P: Prefixable, D> Iterator for NodeIterator<P, D> {
             Some(node) => {
                 self.node = node.next().clone();
                 Some(node)
+            },
+            None => None
+        }
+    }
+}
+
+/// DataIterator, only iterate node with data.
+pub struct DataIterator<P: Prefixable, D> {
+    node: Option<Rc<Node<P, D>>>,
+}
+
+/// Impl DataIterator.
+impl<P: Prefixable, D> DataIterator<P, D> {
+    pub fn node(&self) -> &Option<Rc<Node<P, D>>> {
+        &self.node
+    }
+}
+
+/// Impl Iterator for DataIterator.
+impl<P: Prefixable, D> Iterator for DataIterator<P, D> {
+    type Item = Rc<Node<P, D>>;
+    fn next(&mut self) -> Option<Rc<Node<P, D>>> {
+        let node = self.node.clone();
+        match node {
+            Some(node) => {
+                if !node.has_data() {
+                    let node = node.next_with_data().clone();
+                    match node {
+                        Some(node) => {
+                            self.node = node.next_with_data().clone();
+                            Some(node)
+                        },
+                        None => return None
+                    }
+                }
+                else {
+                    self.node = node.next_with_data().clone();
+                    Some(node)
+                }
             },
             None => None
         }
@@ -424,6 +470,20 @@ impl<P: Prefixable, D> Node<P, D> {
 
         None
     }
+
+    /// Return next Node with data.
+    pub fn next_with_data(&self) -> Option<Rc<Node<P, D>>> {
+        let mut next = self.next();
+
+        while let Some(node) = next {
+            if node.has_data() {
+                return Some(node)
+            }
+            next = node.next();
+        }
+
+        None
+    }
 }
 
 ///
@@ -433,6 +493,7 @@ impl<P: Prefixable, D> Node<P, D> {
 mod tests {
     use super::*;
     use std::net::Ipv4Addr;
+    use std::net::Ipv6Addr;
 
     pub struct Data {
         pub v: u32
@@ -445,6 +506,7 @@ mod tests {
     }
 
     type RouteTableIpv4 = Tree<Prefix<Ipv4Addr>, Rc<Data>>;
+    type RouteTableIpv6 = Tree<Prefix<Ipv6Addr>, Rc<Data>>;
 
     fn route_ipv4_add(tree: &mut RouteTableIpv4,
                       prefix_str: &str, d: Rc<Data>) -> Result<(), PrefixParseError> {
@@ -481,6 +543,49 @@ mod tests {
 
     fn route_ipv4_lookup_exact<'a>(tree: &RouteTableIpv4, prefix_str: &str) -> Result<Option<Rc<Data>>, PrefixParseError> {
         let p = Prefix::<Ipv4Addr>::from_str(prefix_str)?;
+        let it = tree.lookup_exact(&p);
+
+        match it.node().as_ref() {
+            Some(node) => Ok(node.data().clone()),
+            None => Ok(None)
+        }
+    }
+
+    fn route_ipv6_add(tree: &mut RouteTableIpv6,
+                      prefix_str: &str, d: Rc<Data>) -> Result<(), PrefixParseError> {
+        let p = Prefix::<Ipv6Addr>::from_str(prefix_str)?;
+        let mut it = tree.get_node(&p);
+        it.set_data(d);
+
+        Ok(())
+    }
+
+    fn route_ipv6_delete(tree: &mut RouteTableIpv6, prefix_str: &str) -> Result<(), PrefixParseError> {
+        let p = Prefix::<Ipv6Addr>::from_str(prefix_str)?;
+        let it = tree.lookup(&p);
+        tree.erase(it);
+
+        Ok(())
+    }
+
+    fn route_ipv6_lookup(tree: &RouteTableIpv6, prefix_str: &str) -> Result<Option<(Rc<Data>, Prefix<Ipv6Addr>)>, PrefixParseError> {
+        let p = Prefix::<Ipv6Addr>::from_str(prefix_str)?;
+        let it = tree.lookup(&p);
+
+        match it.node().as_ref() {
+            Some(node) => {
+                let data = node.data().clone();
+                match data {
+                    Some(data) => Ok(Some((data.clone(), node.prefix().clone()))),
+                    None => Ok(None)
+                }
+            },
+            None => Ok(None)
+        }
+    }
+
+    fn route_ipv6_lookup_exact<'a>(tree: &RouteTableIpv6, prefix_str: &str) -> Result<Option<Rc<Data>>, PrefixParseError> {
+        let p = Prefix::<Ipv6Addr>::from_str(prefix_str)?;
         let it = tree.lookup_exact(&p);
 
         match it.node().as_ref() {
@@ -530,7 +635,6 @@ mod tests {
 
         route_ipv4_delete(&mut tree, "10.10.0.0/20").expect("Route delete error");
 
-
         route_ipv4_add(&mut tree, "1.1.1.1/32", Data::new(0)).expect("Route add error");
         route_ipv4_add(&mut tree, "192.168.1.0/24", Data::new(0)).expect("Route add error");
 
@@ -538,17 +642,64 @@ mod tests {
         route_ipv4_add(&mut tree, "20.20.0.0/20", Data::new(0)).expect("Route add error");
         route_ipv4_add(&mut tree, "64.64.64.128/25", Data::new(0)).expect("Route add error");
 
-        /*
-        for n in tree {
-            let data = n.data().clone();
-            match data {
-                Some(data) =>
-                    println!("{} {}", n.prefix().to_string(), data.v),
-                None =>
-                    println!("{} -", n.prefix().to_string()),
-            }
+        let v: Vec<_> = tree.into_iter().map(|n| n.prefix().to_string()).collect();
+        assert_eq!(v, &["0.0.0.0/0", "1.1.1.1/32", "10.10.10.0/24", "20.20.0.0/20", "64.64.64.128/25", "127.0.0.0/8", "192.168.1.0/24"]);
+
+        let v: Vec<_> = tree.node_iter().map(|n| n.prefix().to_string()).collect();
+        assert_eq!(v, &["0.0.0.0/0", "0.0.0.0/1", "0.0.0.0/3", "0.0.0.0/4", "1.1.1.1/32", "10.10.10.0/24", "20.20.0.0/20", "64.0.0.0/2", "64.64.64.128/25", "127.0.0.0/8", "192.168.1.0/24"]);
+    }
+
+    #[test]
+    pub fn test_tree_ipv6() {
+        let mut tree = RouteTableIpv6::new();
+
+        route_ipv6_add(&mut tree, "2001::/64", Data::new(100)).expect("Route add error");
+        route_ipv6_add(&mut tree, "2001::/48", Data::new(200)).expect("Route add error");
+
+        match route_ipv6_lookup(&tree, "2001::/64").expect("Route lookup error") {
+            Some((data, _)) => assert_eq!(data.v, 100),
+            None => assert!(false),
         }
-        assert!(false);
-         */
+
+        match route_ipv6_lookup_exact(&tree, "2001::/48").expect("Route lookup error") {
+            Some(data) => assert_eq!(data.v, 200),
+            None => assert!(false),
+        }
+
+        match route_ipv6_lookup_exact(&tree, "2001::/56").expect("Route lookup error") {
+            Some(_data) => assert!(false),
+            None => { },
+        }
+
+        match route_ipv6_lookup(&tree, "2001::/56").expect("Route lookup error") {
+            Some((data, p)) => {
+                assert_eq!(p.len(), 48);
+                assert_eq!(data.v, 200);
+            },
+            None => assert!(false),
+        }
+
+        route_ipv6_add(&mut tree, "::/0", Data::new(0)).expect("Route add error");
+
+        match route_ipv6_lookup(&tree, "2001::/32").expect("Route lookup error") {
+            Some((_data, p)) => {
+                assert_eq!(p.len(), 0);
+            },
+            None => assert!(false),
+        }
+
+        route_ipv6_delete(&mut tree, "2001::/56").expect("Route delete error");
+
+        route_ipv6_add(&mut tree, "2001:db8::1/128", Data::new(0)).expect("Route add error");
+        route_ipv6_add(&mut tree, "3001:a:b::c/64", Data::new(0)).expect("Route add error");
+
+        route_ipv6_add(&mut tree, "7001:1:1::/64", Data::new(0)).expect("Route add error");
+        route_ipv6_add(&mut tree, "ff80::/10", Data::new(0)).expect("Route add error");
+        route_ipv6_add(&mut tree, "ff00::/8", Data::new(0)).expect("Route add error");
+
+        let v: Vec<_> = tree.into_iter().map(|n| n.prefix().to_string()).collect();
+        assert_eq!(v, &["::/0", "2001::/64", "2001:db8::1/128", "3001:a:b::c/64", "7001:1:1::/64", "ff00::/8", "ff80::/10"]);
+        let v: Vec<_> = tree.node_iter().map(|n| n.prefix().to_string()).collect();
+        assert_eq!(v, &["::/0", "::/1", "2000::/3", "2001::/20", "2001::/64", "2001:db8::1/128", "3001:a:b::c/64", "7001:1:1::/64", "ff00::/8", "ff80::/10"]);
     }
 }
