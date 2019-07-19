@@ -106,7 +106,75 @@ impl<P: Prefixable, D> Tree<P, D> {
         NodeIterator::from_node(new_node)
     }
 
-    /// Perform exact match lookup
+    /// Insert data with given prefix, and return:
+    /// - false if data already exist with the prefix.
+    /// - true if successfully inserted the data.
+    pub fn insert(&mut self, prefix: &P, data: D) -> bool {
+        let it = self.lookup_exact(prefix);
+        match it.node() {
+            Some(node) => {
+                if node.has_data() {
+                    false
+                }
+                else {
+                    node.set_data(data);
+                    true
+                }
+            },
+            None => {
+                let mut it = self.get_node(prefix);
+                it.set_data(data);
+                true
+            }
+        }
+    }
+
+    /// Update data with given prefix, and return:
+    /// - old data if data exists and successfully replace.
+    /// - None if data does not exist, and replace does not occur.
+    pub fn update(&mut self, prefix: &P, data: D) -> Option<D> {
+        let it = self.lookup_exact(prefix);
+        match it.node() {
+            Some(node) => {
+                if node.has_data() {
+                    node.set_data(data)
+                }
+                else {
+                    None
+                }
+            },
+            None => None,
+        }
+    }
+
+    /// Insert if data does not exist, or Update, and return:
+    /// - old data if data exists and successfully replace.
+    /// - None if data does not exist.
+    pub fn upsert(&mut self, prefix: &P, data: D) -> Option<D> {
+        let it = self.lookup_exact(prefix);
+        match it.node() {
+            Some(node) => {
+                node.set_data(data)
+            },
+            None => {
+                self.get_node(prefix).set_data(data);
+                None
+            }
+        }
+    }
+
+    /// Delete data with the prefix if data exist, and return:
+    /// - old data if data exists and successfully delete.
+    /// - None if data does not exist.
+    pub fn delete(&mut self, prefix: &P) -> Option<D> {
+        let it = self.lookup_exact(prefix);
+        match it.node() {
+            Some(node) => node.unset_data(),
+            None => None,
+        }
+    }
+
+    /// Perform exact match lookup.
     pub fn lookup_exact(&self, prefix: &P) -> NodeIterator<P, D> {
         let mut curr = self.top.clone();
 
@@ -127,7 +195,7 @@ impl<P: Prefixable, D> Tree<P, D> {
         NodeIterator { node: None }
     }
 
-    /// Perform longest match lookup
+    /// Perform longest match lookup.
     pub fn lookup(&self, prefix: &P) -> NodeIterator<P, D> {
         let mut curr = self.top.clone();
         let mut matched: Option<Rc<Node<P, D>>> = None;
@@ -257,8 +325,8 @@ impl<P: Prefixable, D> NodeIterator<P, D> {
         let node = self.node.clone();
         match node {
             Some(node) => node.set_data(data),
-            None => { }
-        }
+            None => None
+        };
     }
 }
 
@@ -404,8 +472,8 @@ impl<P: Prefixable, D> Node<P, D> {
     }
 
     /// Set data.
-    pub fn set_data(&self, data: D) {
-        self.data.replace(Some(data));
+    pub fn set_data(&self, data: D) -> Option<D> {
+        self.data.replace(Some(data))
     }
 
     /// Unset data.
