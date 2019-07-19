@@ -53,6 +53,11 @@ impl<P: Prefixable, D> Tree<P, D> {
         self.top.clone()
     }
 
+    /// Return count with data.
+    pub fn count(&self) -> usize {
+        self.count
+    }
+
     /// Get node with given prefix, create one if it doesn't exist.
     pub fn get_node(&mut self, prefix: &P) -> NodeIterator<P, D> {
         let mut matched: Option<Rc<Node<P, D>>> = None;
@@ -118,12 +123,14 @@ impl<P: Prefixable, D> Tree<P, D> {
                 }
                 else {
                     node.set_data(data);
+                    self.count += 1;
                     true
                 }
             },
             None => {
                 let mut it = self.get_node(prefix);
                 it.set_data(data);
+                self.count += 1;
                 true
             }
         }
@@ -154,10 +161,14 @@ impl<P: Prefixable, D> Tree<P, D> {
         let it = self.lookup_exact(prefix);
         match it.node() {
             Some(node) => {
+                if !node.has_data() {
+                    self.count += 1;
+                }
                 node.set_data(data)
             },
             None => {
                 self.get_node(prefix).set_data(data);
+                self.count += 1;
                 None
             }
         }
@@ -169,7 +180,12 @@ impl<P: Prefixable, D> Tree<P, D> {
     pub fn delete(&mut self, prefix: &P) -> Option<D> {
         let it = self.lookup_exact(prefix);
         match it.node() {
-            Some(node) => node.unset_data(),
+            Some(node) => {
+                if node.has_data() {
+                    self.count -= 1;
+                }
+                node.unset_data()
+            },
             None => None,
         }
     }
