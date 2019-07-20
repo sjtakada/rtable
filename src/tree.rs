@@ -53,6 +53,11 @@ impl<P: Prefixable, D> Tree<P, D> {
         self.top.clone()
     }
 
+    /// Return count with data.
+    pub fn count(&self) -> usize {
+        self.count
+    }
+
     /// Get node with given prefix, create one if it doesn't exist.
     pub fn get_node(&mut self, prefix: &P) -> NodeIterator<P, D> {
         let mut matched: Option<Rc<Node<P, D>>> = None;
@@ -106,7 +111,88 @@ impl<P: Prefixable, D> Tree<P, D> {
         NodeIterator::from_node(new_node)
     }
 
-    /// Perform exact match lookup
+    /// Insert data with given prefix, and return:
+    /// - false if data already exist with the prefix.
+    /// - true if successfully inserted the data.
+    pub fn insert(&mut self, prefix: &P, data: D) -> bool {
+        let it = self.lookup_exact(prefix);
+        match it.node() {
+            Some(node) => {
+                if node.has_data() {
+                    false
+                }
+                else {
+                    node.set_data(data);
+                    self.count += 1;
+                    true
+                }
+            },
+            None => {
+                let mut it = self.get_node(prefix);
+                it.set_data(data);
+                self.count += 1;
+                true
+            }
+        }
+    }
+
+    /// Update data with given prefix, and return:
+    /// - old data if data exists and successfully replace.
+    /// - None if data does not exist, and replace does not occur.
+    pub fn update(&mut self, prefix: &P, data: D) -> Option<D> {
+        let it = self.lookup_exact(prefix);
+        match it.node() {
+            Some(node) => {
+                if node.has_data() {
+                    node.set_data(data)
+                }
+                else {
+                    None
+                }
+            },
+            None => None,
+        }
+    }
+
+    /// Insert if data does not exist, or Update, and return:
+    /// - old data if data exists and successfully replace.
+    /// - None if data does not exist.
+    pub fn upsert(&mut self, prefix: &P, data: D) -> Option<D> {
+        let it = self.lookup_exact(prefix);
+        match it.node() {
+            Some(node) => {
+                if !node.has_data() {
+                    self.count += 1;
+                }
+                node.set_data(data)
+            },
+            None => {
+                self.get_node(prefix).set_data(data);
+                self.count += 1;
+                None
+            }
+        }
+    }
+
+    /// Delete data with the prefix if data exist, and return:
+    /// - old data if data exists and successfully delete.
+    /// - None if data does not exist.
+    pub fn delete(&mut self, prefix: &P) -> Option<D> {
+        let it = self.lookup_exact(prefix);
+        let old_data = match it.node() {
+            Some(node) => {
+                if node.has_data() {
+                    self.count -= 1;
+                }
+                node.unset_data()
+            },
+            None => None,
+        };
+        self.erase(it);
+        old_data
+    }
+
+    /// Perform exact match lookup.
     pub fn lookup_exact(&self, prefix: &P) -> NodeIterator<P, D> {
         let mut curr = self.top.clone();
 
@@ -127,7 +213,7 @@ impl<P: Prefixable, D> Tree<P, D> {
         NodeIterator { node: None }
     }
 
-    /// Perform longest match lookup
+    /// Perform longest match lookup.
     pub fn lookup(&self, prefix: &P) -> NodeIterator<P, D> {
         let mut curr = self.top.clone();
         let mut matched: Option<Rc<Node<P, D>>> = None;
@@ -172,10 +258,8 @@ impl<P: Prefixable, D> Tree<P, D> {
 
             let child = if has_left {
                 target.children[Child::Left as usize].replace(None)
-            } else if has_right {
-                target.children[Child::Right as usize].replace(None)
             } else {
-                None
+                target.children[Child::Right as usize].replace(None)
             };
 
             let parent = target.parent().clone();
@@ -189,10 +273,16 @@ impl<P: Prefixable, D> Tree<P, D> {
             let parent = target.parent().clone();
             match parent {
                 Some(node) => {
-                    if same_object(node.child(Child::Left).unwrap().as_ref(), target.as_ref()) {
-                        node.set_child_at(child.unwrap(), Child::Left as u8);
+                    // TODO: refactoring.
+                    let bit = if node.has_child_with(Child::Left as u8) && same_object(node.child(Child::Left).unwrap().as_ref(), target.as_ref()) {
+                        Child::Left
                     } else {
-                        node.set_child_at(child.unwrap(), Child::Right as u8);
+                        Child::Right
+                    };
+
+                    match child {
+                        None => node.unset_child_at(bit as u8),
+                        Some(child) => node.set_child_at(child, bit as u8),
                     }
                 },
                 None => {
@@ -257,8 +347,8 @@ impl<P: Prefixable, D> NodeIterator<P, D> {
         let node = self.node.clone();
         match node {
             Some(node) => node.set_data(data),
-            None => { }
-        }
+            None => None
+        };
     }
 }
 
@@ -376,6 +466,16 @@ impl<P: Prefixable, D> Node<P, D> {
         self.children[bit as usize].borrow_mut().clone()
     }
 
+    /// Return true if child at left or right.
+    pub fn has_child_with(&self, bit: u8) -> bool {
+        if let Some(ref _node) = *self.children[bit as usize].borrow_mut() {
+            true
+        }
+        else {
+            false
+        }
+    }
+
     /// Return parent node.
     pub fn parent(&self) -> Option<Rc<Node<P, D>>> {
         self.parent.borrow_mut().clone()
@@ -393,6 +493,11 @@ impl<P: Prefixable, D> Node<P, D> {
         self.children[bit as usize].borrow_mut().replace(child.clone());
     }
 
+    /// Unset child at left or fight.
+    fn unset_child_at(&self, bit: u8) {
+        self.children[bit as usize].replace(None);
+    }
+
     /// Set parent.
     pub fn set_parent(&self, parent: Rc<Node<P, D>>) {
         self.parent.replace(Some(parent.clone()));
@@ -404,8 +509,8 @@ impl<P: Prefixable, D> Node<P, D> {
     }
 
     /// Set data.
-    pub fn set_data(&self, data: D) {
-        self.data.replace(Some(data));
+    pub fn set_data(&self, data: D) -> Option<D> {
+        self.data.replace(Some(data))
     }
 
     /// Unset data.
@@ -511,16 +616,14 @@ mod tests {
     fn route_ipv4_add(tree: &mut RouteTableIpv4,
                       prefix_str: &str, d: Rc<Data>) -> Result<(), PrefixParseError> {
         let p = Prefix::<Ipv4Addr>::from_str(prefix_str)?;
-        let mut it = tree.get_node(&p);
-        it.set_data(d);
+        tree.insert(&p, d);
 
         Ok(())
     }
 
     fn route_ipv4_delete(tree: &mut RouteTableIpv4, prefix_str: &str) -> Result<(), PrefixParseError> {
         let p = Prefix::<Ipv4Addr>::from_str(prefix_str)?;
-        let it = tree.lookup(&p);
-        tree.erase(it);
+        tree.delete(&p);
 
         Ok(())
     }
@@ -554,16 +657,14 @@ mod tests {
     fn route_ipv6_add(tree: &mut RouteTableIpv6,
                       prefix_str: &str, d: Rc<Data>) -> Result<(), PrefixParseError> {
         let p = Prefix::<Ipv6Addr>::from_str(prefix_str)?;
-        let mut it = tree.get_node(&p);
-        it.set_data(d);
+        tree.insert(&p, d);
 
         Ok(())
     }
 
     fn route_ipv6_delete(tree: &mut RouteTableIpv6, prefix_str: &str) -> Result<(), PrefixParseError> {
         let p = Prefix::<Ipv6Addr>::from_str(prefix_str)?;
-        let it = tree.lookup(&p);
-        tree.erase(it);
+        tree.delete(&p);
 
         Ok(())
     }
@@ -633,7 +734,11 @@ mod tests {
             None => assert!(false),
         }
 
+        assert_eq!(tree.count(), 3);
+
+        // TODO: Actually it does not delete the route.
         route_ipv4_delete(&mut tree, "10.10.0.0/20").expect("Route delete error");
+        assert_eq!(tree.count(), 3);
 
         route_ipv4_add(&mut tree, "1.1.1.1/32", Data::new(0)).expect("Route add error");
         route_ipv4_add(&mut tree, "192.168.1.0/24", Data::new(0)).expect("Route add error");
@@ -643,10 +748,30 @@ mod tests {
         route_ipv4_add(&mut tree, "64.64.64.128/25", Data::new(0)).expect("Route add error");
 
         let v: Vec<_> = tree.into_iter().map(|n| n.prefix().to_string()).collect();
-        assert_eq!(v, &["0.0.0.0/0", "1.1.1.1/32", "10.10.10.0/24", "20.20.0.0/20", "64.64.64.128/25", "127.0.0.0/8", "192.168.1.0/24"]);
+        assert_eq!(v, &["0.0.0.0/0", "1.1.1.1/32", "10.10.0.0/16", "10.10.10.0/24", "20.20.0.0/20", "64.64.64.128/25", "127.0.0.0/8", "192.168.1.0/24"]);
 
         let v: Vec<_> = tree.node_iter().map(|n| n.prefix().to_string()).collect();
-        assert_eq!(v, &["0.0.0.0/0", "0.0.0.0/1", "0.0.0.0/3", "0.0.0.0/4", "1.1.1.1/32", "10.10.10.0/24", "20.20.0.0/20", "64.0.0.0/2", "64.64.64.128/25", "127.0.0.0/8", "192.168.1.0/24"]);
+        assert_eq!(v, &["0.0.0.0/0", "0.0.0.0/1", "0.0.0.0/3", "0.0.0.0/4", "1.1.1.1/32", "10.10.0.0/16", "10.10.10.0/24", "20.20.0.0/20", "64.0.0.0/2", "64.64.64.128/25", "127.0.0.0/8", "192.168.1.0/24"]);
+
+        assert_eq!(tree.count(), 8);
+
+        route_ipv4_delete(&mut tree, "10.10.10.0/24").expect("Route add error");
+        route_ipv4_delete(&mut tree, "10.10.0.0/16").expect("Route add error");
+        //route_ipv4_delete(&mut tree, "0.0.0.0/0").expect("Route add error");
+        route_ipv4_delete(&mut tree, "1.1.1.1/32").expect("Route add error");
+        route_ipv4_delete(&mut tree, "192.168.1.0/24").expect("Route add error");
+        route_ipv4_delete(&mut tree, "127.0.0.0/8").expect("Route add error");
+
+        route_ipv4_delete(&mut tree, "20.20.0.0/20").expect("Route add error");
+        route_ipv4_delete(&mut tree, "64.64.64.128/25").expect("Route add error");
+
+        assert_eq!(tree.count(), 1);
+
+        let v: Vec<_> = tree.into_iter().map(|n| n.prefix().to_string()).collect();
+        assert_eq!(v, &["0.0.0.0/0"]);
+
+        let v: Vec<_> = tree.node_iter().map(|n| n.prefix().to_string()).collect();
+        assert_eq!(v, &["0.0.0.0/0"]);
     }
 
     #[test]
@@ -688,6 +813,7 @@ mod tests {
             None => assert!(false),
         }
 
+        // Likewise, it does not delete the route.
         route_ipv6_delete(&mut tree, "2001::/56").expect("Route delete error");
 
         route_ipv6_add(&mut tree, "2001:db8::1/128", Data::new(0)).expect("Route add error");
@@ -698,8 +824,8 @@ mod tests {
         route_ipv6_add(&mut tree, "ff00::/8", Data::new(0)).expect("Route add error");
 
         let v: Vec<_> = tree.into_iter().map(|n| n.prefix().to_string()).collect();
-        assert_eq!(v, &["::/0", "2001::/64", "2001:db8::1/128", "3001:a:b::c/64", "7001:1:1::/64", "ff00::/8", "ff80::/10"]);
+        assert_eq!(v, &["::/0", "2001::/48", "2001::/64", "2001:db8::1/128", "3001:a:b::c/64", "7001:1:1::/64", "ff00::/8", "ff80::/10"]);
         let v: Vec<_> = tree.node_iter().map(|n| n.prefix().to_string()).collect();
-        assert_eq!(v, &["::/0", "::/1", "2000::/3", "2001::/20", "2001::/64", "2001:db8::1/128", "3001:a:b::c/64", "7001:1:1::/64", "ff00::/8", "ff80::/10"]);
+        assert_eq!(v, &["::/0", "::/1", "2000::/3", "2001::/20", "2001::/48", "2001::/64", "2001:db8::1/128", "3001:a:b::c/64", "7001:1:1::/64", "ff00::/8", "ff80::/10"]);
     }
 }
