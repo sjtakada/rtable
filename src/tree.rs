@@ -757,21 +757,22 @@ mod tests {
 
         route_ipv4_delete(&mut tree, "10.10.10.0/24").expect("Route add error");
         route_ipv4_delete(&mut tree, "10.10.0.0/16").expect("Route add error");
-        //route_ipv4_delete(&mut tree, "0.0.0.0/0").expect("Route add error");
+        route_ipv4_delete(&mut tree, "0.0.0.0/0").expect("Route add error");
         route_ipv4_delete(&mut tree, "1.1.1.1/32").expect("Route add error");
         route_ipv4_delete(&mut tree, "192.168.1.0/24").expect("Route add error");
         route_ipv4_delete(&mut tree, "127.0.0.0/8").expect("Route add error");
-
         route_ipv4_delete(&mut tree, "20.20.0.0/20").expect("Route add error");
         route_ipv4_delete(&mut tree, "64.64.64.128/25").expect("Route add error");
 
-        assert_eq!(tree.count(), 1);
+        assert_eq!(tree.count(), 0);
+
+        let x: Vec<&str> = [].to_vec();
 
         let v: Vec<_> = tree.into_iter().map(|n| n.prefix().to_string()).collect();
-        assert_eq!(v, &["0.0.0.0/0"]);
+        assert_eq!(v, x);
 
         let v: Vec<_> = tree.node_iter().map(|n| n.prefix().to_string()).collect();
-        assert_eq!(v, &["0.0.0.0/0"]);
+        assert_eq!(v, x);
     }
 
     #[test]
@@ -813,12 +814,14 @@ mod tests {
             None => assert!(false),
         }
 
+        assert_eq!(tree.count(), 3);
+
         // Likewise, it does not delete the route.
         route_ipv6_delete(&mut tree, "2001::/56").expect("Route delete error");
+        assert_eq!(tree.count(), 3);
 
         route_ipv6_add(&mut tree, "2001:db8::1/128", Data::new(0)).expect("Route add error");
         route_ipv6_add(&mut tree, "3001:a:b::c/64", Data::new(0)).expect("Route add error");
-
         route_ipv6_add(&mut tree, "7001:1:1::/64", Data::new(0)).expect("Route add error");
         route_ipv6_add(&mut tree, "ff80::/10", Data::new(0)).expect("Route add error");
         route_ipv6_add(&mut tree, "ff00::/8", Data::new(0)).expect("Route add error");
@@ -827,5 +830,24 @@ mod tests {
         assert_eq!(v, &["::/0", "2001::/48", "2001::/64", "2001:db8::1/128", "3001:a:b::c/64", "7001:1:1::/64", "ff00::/8", "ff80::/10"]);
         let v: Vec<_> = tree.node_iter().map(|n| n.prefix().to_string()).collect();
         assert_eq!(v, &["::/0", "::/1", "2000::/3", "2001::/20", "2001::/48", "2001::/64", "2001:db8::1/128", "3001:a:b::c/64", "7001:1:1::/64", "ff00::/8", "ff80::/10"]);
+
+        route_ipv6_delete(&mut tree, "2001::/64").expect("Route add error");
+        route_ipv6_delete(&mut tree, "2001::/48").expect("Route add error");
+        route_ipv6_delete(&mut tree, "::/0").expect("Route add error");
+        route_ipv6_delete(&mut tree, "2001:db8::1/128").expect("Route add error");
+        route_ipv6_delete(&mut tree, "3001:a:b::c/64").expect("Route add error");
+        route_ipv6_delete(&mut tree, "7001:1:1::/64").expect("Route add error");
+        route_ipv6_delete(&mut tree, "ff80::/10").expect("Route add error");
+        route_ipv6_delete(&mut tree, "ff00::/8").expect("Route add error");
+
+        assert_eq!(tree.count(), 0);
+
+        let x: Vec<&str> = [].to_vec();
+
+        let v: Vec<_> = tree.into_iter().map(|n| n.prefix().to_string()).collect();
+        assert_eq!(v, x);
+
+        let v: Vec<_> = tree.node_iter().map(|n| n.prefix().to_string()).collect();
+        assert_eq!(v, x);
     }
 }
