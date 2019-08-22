@@ -11,6 +11,9 @@ use std::str::FromStr;
 use std::error::Error;
 use std::fmt;
     
+const IPV4_MAX_BITS_LEN: u8 = 32;
+const IPV6_MAX_BITS_LEN: u8 = 128;
+
 ///
 /// Trait to extend IpAddr.
 ///
@@ -20,18 +23,28 @@ pub trait AddressLen {
 
     /// Construct address with all 0s.
     fn empty_new() -> Self;
+
+    /// Construct address from slice.
+    fn from_slice(s: &[u8]) -> Self;
 }
 
 /// Trait implementation for Ipv4Addr.
 impl AddressLen for Ipv4Addr {
     /// Return address length in bits.
     fn address_len() -> u8 {
-        32
+        IPV4_MAX_BITS_LEN
     }
 
     /// Construct address with all 0s.
     fn empty_new() -> Self {
-        Ipv4Addr::new(0, 0, 0, 0)
+        Ipv4Addr::UNSPECIFIED
+    }
+
+    /// Construct address from slice.
+    fn from_slice(s: &[u8]) -> Self {
+        let t: [u8; 4] = [s[0], s[1], s[2], s[3]];
+
+        Ipv4Addr::from(t)
     }
 }
 
@@ -39,12 +52,20 @@ impl AddressLen for Ipv4Addr {
 impl AddressLen for Ipv6Addr {
     /// Return address length in bits.
     fn address_len() -> u8 {
-        128
+        IPV6_MAX_BITS_LEN
     }
 
     /// Construct address with all 0s.
     fn empty_new() -> Self {
-        Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0)
+        Ipv6Addr::UNSPECIFIED
+    }
+
+    /// Construct address from slice.
+    fn from_slice(s: &[u8]) -> Self {
+        let t: [u8; 16] = [s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7],
+                           s[8], s[9], s[10], s[11], s[12], s[13], s[14], s[15]];
+
+        Ipv6Addr::from(t)
     }
 }
 
@@ -273,6 +294,22 @@ impl<T: AddressLen + Clone> Prefixable for Prefix<T> {
 /// Abstract IPv4 and IPv6 both.
 ///
 impl<T: AddressLen + FromStr> Prefix<T> {
+    /// Construct empty prefix.
+    pub fn new() -> Self {
+        Self {
+            address: T::empty_new(),
+            len: 0,
+        }
+    }
+
+    /// Construct a prefix from address and prefix length.
+    pub fn from_slice(slice: &[u8], prefix_len: u8) -> Self{
+        Self {
+            address: T::from_slice(slice),
+            len: prefix_len,
+        }
+    }
+
     /// Construct prefix from string slice.
     pub fn from_str(s: &str) -> Result<Prefix<T>, PrefixParseError> {
         let (pos, prefix_len) = match s.find('/') {
@@ -418,6 +455,9 @@ mod tests {
         assert_eq!(p.address().octets(), [172, 16, 0, 0]);
         assert_eq!(p.to_string(), "172.16.0.0/16");
 
+        let p = Prefix::<Ipv4Addr>::from_slice(&[172, 16, 0, 1], 24);
+        assert_eq!(p.to_string(), "172.16.0.1/24");
+
         match Prefix::<Ipv4Addr>::from_str("10.10.10.10/33") {
             Ok(_) => assert!(false, "Should return error"),
             Err(_err) => { }
@@ -473,6 +513,9 @@ mod tests {
         p.apply_mask();
         assert_eq!(p.address().segments(), [0x2001, 0x1234, 0, 0, 0, 0, 0, 0xff00]);
         assert_eq!(p.to_string(), "2001:1234::ff00/120");
+
+        let p = Prefix::<Ipv6Addr>::from_slice(&[0x20, 0x01, 0x12, 0x34, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 48);
+        assert_eq!(p.to_string(), "2001:1234::/48");
 
         match Prefix::<Ipv6Addr>::from_str("2001:1234::/130") {
             Ok(_) => assert!(false, "Should return error"),
