@@ -208,7 +208,7 @@ fn slice_copy_u32(s: &mut [u8], v: u32, i: usize) {
 ///
 /// IP Prefix.
 ///
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Prefix<T> {
     // IP Address.
     address: T,
