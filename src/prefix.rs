@@ -208,7 +208,7 @@ fn slice_copy_u32(s: &mut [u8], v: u32, i: usize) {
 ///
 /// IP Prefix.
 ///
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Prefix<T> {
     // IP Address.
     address: T,
@@ -418,6 +418,7 @@ impl Error for PrefixParseError {
 ///
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use super::*;
 
     #[test]
@@ -485,6 +486,47 @@ mod tests {
         let p2 = Prefix::<Ipv4Addr>::from_str("128.10.10.0/24").unwrap();
         let pc = Prefix::<Ipv4Addr>::from_common(&p1, &p2);
         assert_eq!(pc.to_string(), "128.0.0.0/1");
+    }
+
+    #[test]
+    pub fn test_prefix_ipv4_sort() {
+        let mut map = BTreeMap::new();
+
+        let p1 = Prefix::<Ipv4Addr>::from_str("10.10.10.0/24").unwrap();
+        let p2 = Prefix::<Ipv4Addr>::from_str("10.10.11.0/24").unwrap();
+        let p3 = Prefix::<Ipv4Addr>::from_common(&p1, &p2);
+        //assert_eq!(pc.to_string(), "10.10.10.0/23");
+
+        let p4 = Prefix::<Ipv4Addr>::from_str("10.10.10.0/24").unwrap();
+        let p5 = Prefix::<Ipv4Addr>::from_str("10.10.0.0/16").unwrap();
+        let p6 = Prefix::<Ipv4Addr>::from_common(&p4, &p5);
+        //assert_eq!(pc.to_string(), "10.10.0.0/16");
+
+        let p7 = Prefix::<Ipv4Addr>::from_str("192.168.0.0/24").unwrap();
+        let p8 = Prefix::<Ipv4Addr>::from_str("10.10.10.0/24").unwrap();
+        let p9 = Prefix::<Ipv4Addr>::from_common(&p7, &p8);
+        //assert_eq!(pc.to_string(), "0.0.0.0/0");
+
+        let p10 = Prefix::<Ipv4Addr>::from_str("192.168.0.0/24").unwrap();
+        let p11 = Prefix::<Ipv4Addr>::from_str("128.10.10.0/24").unwrap();
+        let p12 = Prefix::<Ipv4Addr>::from_common(&p10, &p11);
+        //assert_eq!(pc.to_string(), "128.0.0.0/1");
+
+        map.insert(p1, 1);
+        map.insert(p2, 2);
+        map.insert(p3, 3);
+
+        map.insert(p5, 5);
+
+        map.insert(p7, 7);
+
+        map.insert(p9, 9);
+
+        map.insert(p11, 11);
+        map.insert(p12, 12);
+
+        let v: Vec<_> = map.iter().map(|(k, v)| v).collect();
+        assert_eq!(v, vec![&9, &5, &3, &1, &2, &12, &11, &7]);
     }
 
     #[test]
