@@ -5,12 +5,12 @@
 // IP Prefix - abstract IPv? address and prefix length.
 //
 
+use std::error::Error;
+use std::fmt;
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
 use std::str::FromStr;
-use std::error::Error;
-use std::fmt;
-    
+
 const IPV4_MAX_BITS_LEN: u8 = 32;
 const IPV6_MAX_BITS_LEN: u8 = 128;
 
@@ -62,8 +62,10 @@ impl AddressLen for Ipv6Addr {
 
     /// Construct address from slice.
     fn from_slice(s: &[u8]) -> Self {
-        let t: [u8; 16] = [s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7],
-                           s[8], s[9], s[10], s[11], s[12], s[13], s[14], s[15]];
+        let t: [u8; 16] = [
+            s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11], s[12], s[13],
+            s[14], s[15],
+        ];
 
         Ipv6Addr::from(t)
     }
@@ -100,7 +102,7 @@ pub trait Prefixable {
     /// Return true if given prefix is included in this prefix.
     fn contains(&self, prefix: &Self) -> bool {
         if self.len() > prefix.len() {
-            return false
+            return false;
         }
 
         let np = self.octets();
@@ -111,18 +113,18 @@ pub trait Prefixable {
 
         if shift > 0 {
             if (MASKBITS[shift] & (np[offset] ^ pp[offset])) > 0 {
-                return false
+                return false;
             }
         }
 
         while offset > 0 {
             offset -= 1;
             if np[offset] != pp[offset] {
-                return false
+                return false;
             }
         }
 
-        return true
+        return true;
     }
 }
 
@@ -138,7 +140,6 @@ const PLEN2MASK: [[u8; 4]; 32] = [
     [0xf8, 0x00, 0x00, 0x00],
     [0xfc, 0x00, 0x00, 0x00],
     [0xfe, 0x00, 0x00, 0x00],
-
     [0xff, 0x00, 0x00, 0x00],
     [0xff, 0x80, 0x00, 0x00],
     [0xff, 0xc0, 0x00, 0x00],
@@ -147,7 +148,6 @@ const PLEN2MASK: [[u8; 4]; 32] = [
     [0xff, 0xf8, 0x00, 0x00],
     [0xff, 0xfc, 0x00, 0x00],
     [0xff, 0xfe, 0x00, 0x00],
-
     [0xff, 0xff, 0x00, 0x00],
     [0xff, 0xff, 0x80, 0x00],
     [0xff, 0xff, 0xc0, 0x00],
@@ -156,7 +156,6 @@ const PLEN2MASK: [[u8; 4]; 32] = [
     [0xff, 0xff, 0xf8, 0x00],
     [0xff, 0xff, 0xfc, 0x00],
     [0xff, 0xff, 0xfe, 0x00],
-
     [0xff, 0xff, 0xff, 0x00],
     [0xff, 0xff, 0xff, 0x80],
     [0xff, 0xff, 0xff, 0xc0],
@@ -168,29 +167,11 @@ const PLEN2MASK: [[u8; 4]; 32] = [
 ];
 
 const PLEN2MASK6: [u16; 16] = [
-    0x0000,
-    0x8000,
-    0xc000,
-    0xe000,
-    0xf000,
-    0xf800,
-    0xfc00,
-    0xfe00,
-
-    0xff00,
-    0xff80,
-    0xffc0,
-    0xffe0,
-    0xfff0,
-    0xfff8,
-    0xfffc,
-    0xfffe,
+    0x0000, 0x8000, 0xc000, 0xe000, 0xf000, 0xf800, 0xfc00, 0xfe00, 0xff00, 0xff80, 0xffc0, 0xffe0,
+    0xfff0, 0xfff8, 0xfffc, 0xfffe,
 ];
 
-const MASKBITS: [u8; 9] = [
-    0x00, 0x80, 0xc0, 0xe0,
-    0xf0, 0xf8, 0xfc, 0xfe, 0xff
-];
+const MASKBITS: [u8; 9] = [0x00, 0x80, 0xc0, 0xe0, 0xf0, 0xf8, 0xfc, 0xfe, 0xff];
 
 /// Get 4 u8 values from slices and return u32 in network byte order.
 fn slice_get_u32(s: &[u8], i: usize) -> u32 {
@@ -217,13 +198,13 @@ pub struct Prefix<T> {
     len: u8,
 }
 
-// 
+//
 impl<T: AddressLen + Clone> Prefixable for Prefix<T> {
     /// Construct a prefix from given prefix.
     fn from_prefix(p: &Self) -> Self {
         Self {
             address: p.address.clone(),
-            len: p.len
+            len: p.len,
         }
     }
 
@@ -233,7 +214,10 @@ impl<T: AddressLen + Clone> Prefixable for Prefix<T> {
         let p2 = prefix2.octets();
         let mut i = 0u8;
         let mut j = 0u8;
-        let mut pcommon = Self { address: T::empty_new(), len: 0 };
+        let mut pcommon = Self {
+            address: T::empty_new(),
+            len: 0,
+        };
         let px = pcommon.octets_mut();
         let bytes = T::address_len() / 8;
 
@@ -243,8 +227,7 @@ impl<T: AddressLen + Clone> Prefixable for Prefix<T> {
             let cp: u32 = l1 ^ l2;
             if cp == 0 {
                 slice_copy_u32(px, l1, i as usize);
-            }
-            else {
+            } else {
                 j = cp.leading_zeros() as u8;
                 let (mask, _) = match j {
                     0 => (0, false),
@@ -276,17 +259,13 @@ impl<T: AddressLen + Clone> Prefixable for Prefix<T> {
     /// Return reference of slice to address.
     fn octets(&self) -> &[u8] {
         let p = (&self.address as *const T) as *const u8;
-        unsafe {
-            std::slice::from_raw_parts(p, std::mem::size_of::<T>())
-        }
+        unsafe { std::slice::from_raw_parts(p, std::mem::size_of::<T>()) }
     }
 
     /// Return mutable reference of slice to address.
     fn octets_mut(&mut self) -> &mut [u8] {
         let p = (&mut self.address as *mut T) as *mut u8;
-        unsafe {
-            std::slice::from_raw_parts_mut(p, std::mem::size_of::<T>())
-        }
+        unsafe { std::slice::from_raw_parts_mut(p, std::mem::size_of::<T>()) }
     }
 }
 
@@ -303,7 +282,7 @@ impl<T: AddressLen + FromStr> Prefix<T> {
     }
 
     /// Construct a prefix from address and prefix length.
-    pub fn from_slice(slice: &[u8], prefix_len: u8) -> Self{
+    pub fn from_slice(slice: &[u8], prefix_len: u8) -> Self {
         Self {
             address: T::from_slice(slice),
             len: prefix_len,
@@ -314,23 +293,20 @@ impl<T: AddressLen + FromStr> Prefix<T> {
     pub fn from_str(s: &str) -> Result<Prefix<T>, PrefixParseError> {
         let (pos, prefix_len) = match s.find('/') {
             // Address with prefix length.
-            Some(pos) => {
-                match s[pos + 1..].parse::<u8>() {
-                    Ok(prefix_len) if prefix_len <= T::address_len() => (pos, prefix_len),
-                    _ => return Err(PrefixParseError(())),
-                }
+            Some(pos) => match s[pos + 1..].parse::<u8>() {
+                Ok(prefix_len) if prefix_len <= T::address_len() => (pos, prefix_len),
+                _ => return Err(PrefixParseError(())),
             },
             // Consider host address.
             None => (s.len(), T::address_len()),
         };
-                    
+
         let address_str = &s[..pos];
         match T::from_str(address_str) {
-            Ok(address) =>
-                Ok(Prefix::<T> {
-                    address: address,
-                    len: prefix_len,
-                }),
+            Ok(address) => Ok(Prefix::<T> {
+                address: address,
+                len: prefix_len,
+            }),
             Err(_) => Err(PrefixParseError(())),
         }
     }
@@ -348,10 +324,12 @@ impl Prefix<Ipv4Addr> {
         if self.len < Ipv4Addr::address_len() {
             let octets = self.address().octets();
             let mask = &PLEN2MASK[self.len as usize];
-            self.address = Ipv4Addr::new(octets[0] & mask[0],
-                                         octets[1] & mask[1],
-                                         octets[2] & mask[2],
-                                         octets[3] & mask[3]);
+            self.address = Ipv4Addr::new(
+                octets[0] & mask[0],
+                octets[1] & mask[1],
+                octets[2] & mask[2],
+                octets[3] & mask[3],
+            );
         }
     }
 }
@@ -365,26 +343,26 @@ impl Prefix<Ipv6Addr> {
                 let offset = len - s * 16;
                 if offset >= 16 {
                     0xffff
-                }
-                else {
+                } else {
                     PLEN2MASK6[offset as usize]
                 }
-            }
-            else {
+            } else {
                 0
             }
         }
 
         if self.len < Ipv6Addr::address_len() {
             let segments = self.address().segments();
-            self.address = Ipv6Addr::new(segments[0] & mask4segment(0, self.len),
-                                         segments[1] & mask4segment(1, self.len),
-                                         segments[2] & mask4segment(2, self.len),
-                                         segments[3] & mask4segment(3, self.len),
-                                         segments[4] & mask4segment(4, self.len),
-                                         segments[5] & mask4segment(5, self.len),
-                                         segments[6] & mask4segment(6, self.len),
-                                         segments[7] & mask4segment(7, self.len));
+            self.address = Ipv6Addr::new(
+                segments[0] & mask4segment(0, self.len),
+                segments[1] & mask4segment(1, self.len),
+                segments[2] & mask4segment(2, self.len),
+                segments[3] & mask4segment(3, self.len),
+                segments[4] & mask4segment(4, self.len),
+                segments[5] & mask4segment(5, self.len),
+                segments[6] & mask4segment(6, self.len),
+                segments[7] & mask4segment(7, self.len),
+            );
         }
     }
 }
@@ -418,8 +396,8 @@ impl Error for PrefixParseError {
 ///
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
     use super::*;
+    use std::collections::BTreeMap;
 
     #[test]
     pub fn test_octets() {
@@ -461,7 +439,7 @@ mod tests {
 
         match Prefix::<Ipv4Addr>::from_str("10.10.10.10/33") {
             Ok(_) => assert!(false, "Should return error"),
-            Err(_err) => { }
+            Err(_err) => {}
         }
     }
 
@@ -540,7 +518,10 @@ mod tests {
         assert_eq!(p.to_string(), "2001:1234::/48");
 
         let mut p = Prefix::<Ipv6Addr>::from_str("2001:1234::567/48").unwrap();
-        assert_eq!(p.address().segments(), [0x2001, 0x1234, 0, 0, 0, 0, 0, 0x567]);
+        assert_eq!(
+            p.address().segments(),
+            [0x2001, 0x1234, 0, 0, 0, 0, 0, 0x567]
+        );
         assert_eq!(p.to_string(), "2001:1234::567/48");
         p.apply_mask();
         assert_eq!(p.address().segments(), [0x2001, 0x1234, 0, 0, 0, 0, 0, 0]);
@@ -548,20 +529,29 @@ mod tests {
 
         let mut p = Prefix::<Ipv6Addr>::from_str("2001:1234::ffff/124").unwrap();
         p.apply_mask();
-        assert_eq!(p.address().segments(), [0x2001, 0x1234, 0, 0, 0, 0, 0, 0xfff0]);
+        assert_eq!(
+            p.address().segments(),
+            [0x2001, 0x1234, 0, 0, 0, 0, 0, 0xfff0]
+        );
         assert_eq!(p.to_string(), "2001:1234::fff0/124");
 
         let mut p = Prefix::<Ipv6Addr>::from_str("2001:1234::ffff/120").unwrap();
         p.apply_mask();
-        assert_eq!(p.address().segments(), [0x2001, 0x1234, 0, 0, 0, 0, 0, 0xff00]);
+        assert_eq!(
+            p.address().segments(),
+            [0x2001, 0x1234, 0, 0, 0, 0, 0, 0xff00]
+        );
         assert_eq!(p.to_string(), "2001:1234::ff00/120");
 
-        let p = Prefix::<Ipv6Addr>::from_slice(&[0x20, 0x01, 0x12, 0x34, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 48);
+        let p = Prefix::<Ipv6Addr>::from_slice(
+            &[0x20, 0x01, 0x12, 0x34, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            48,
+        );
         assert_eq!(p.to_string(), "2001:1234::/48");
 
         match Prefix::<Ipv6Addr>::from_str("2001:1234::/130") {
             Ok(_) => assert!(false, "Should return error"),
-            Err(_err) => { }
+            Err(_err) => {}
         }
     }
 }
