@@ -112,26 +112,26 @@ impl<P: Prefixable, D> Tree<P, D> {
     }
 
     /// Insert data with given prefix, and return:
-    /// - false if data already exist with the prefix.
-    /// - true if successfully inserted the data.
-    pub fn insert(&mut self, prefix: &P, data: D) -> bool {
+    /// - Some(data) if data already exist with the prefix.
+    /// - None if successfully inserted the data.
+    pub fn insert(&mut self, prefix: &P, data: D) -> Option<D> {
         let it = self.lookup_exact(prefix);
         match it.node() {
             Some(node) => {
                 if node.has_data() {
-                    false
+                    Some(data)
                 }
                 else {
                     node.set_data(data);
                     self.count += 1;
-                    true
+                    None
                 }
             },
             None => {
                 let mut it = self.get_node(prefix);
                 it.set_data(data);
                 self.count += 1;
-                true
+                None
             }
         }
     }

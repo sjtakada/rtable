@@ -302,6 +302,14 @@ impl<T: AddressLen + FromStr> Prefix<T> {
         }
     }
 
+    /// Construct a prefix from an address and prefix length.
+    pub fn from(address: T, len: u8) -> Self {
+        Self {
+            address: address,
+            len: len,
+        }
+    }
+
     /// Construct a prefix from address and prefix length.
     pub fn from_slice(slice: &[u8], prefix_len: u8) -> Self{
         Self {
@@ -392,6 +400,22 @@ impl Prefix<Ipv6Addr> {
 impl<T: AddressLen + ToString> fmt::Display for Prefix<T> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         write!(fmt, "{}/{}", self.address.to_string(), self.len)
+    }
+}
+
+/// Utility functions.
+pub fn prefix_ipv4_from(addr_str: &str, mask_str: &str) -> Result<Prefix<Ipv4Addr>, PrefixParseError> {
+    match Ipv4Addr::from_str(addr_str) {
+        Err(_) => Err(PrefixParseError(())),
+        Ok(addr) => {
+            match Ipv4Addr::from_str(mask_str) {
+                Err(_) => Err(PrefixParseError(())),
+                Ok(mask) => {
+                    let mask = u32::from(mask);
+                    Ok(Prefix::<Ipv4Addr>::from(addr, (32 - mask.leading_zeros()) as u8))
+                },
+            }
+        }
     }
 }
 
