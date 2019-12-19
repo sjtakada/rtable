@@ -1,6 +1,6 @@
 [package]
 name = "rtable"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Toshiaki Takada <toshi@reze.rs>"]
 edition = "2018"
 description = "Generic Routing Table Library with Radix Tree"
