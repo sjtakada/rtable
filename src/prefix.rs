@@ -5,6 +5,7 @@
 // IP Prefix - abstract IPv? address and prefix length.
 //
 
+use std::mem::size_of;
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
 use std::str::FromStr;
@@ -26,6 +27,9 @@ pub trait AddressLen {
 
     /// Construct address from slice.
     fn from_slice(s: &[u8]) -> Self;
+
+    /// Return reference of slice to address.
+    fn octets_ref(&self) -> &[u8];
 }
 
 /// Trait implementation for Ipv4Addr.
@@ -45,6 +49,14 @@ impl AddressLen for Ipv4Addr {
         let t: [u8; 4] = [s[0], s[1], s[2], s[3]];
 
         Ipv4Addr::from(t)
+    }
+
+    /// Return reference of slice to address.
+    fn octets_ref(&self) -> &[u8] {
+        let p = (self as *const Ipv4Addr) as *const u8;
+        unsafe {
+            std::slice::from_raw_parts(p, std::mem::size_of::<Ipv4Addr>())
+        }
     }
 }
 
@@ -67,6 +79,14 @@ impl AddressLen for Ipv6Addr {
 
         Ipv6Addr::from(t)
     }
+
+    /// Return reference of slice to address.
+    fn octets_ref(&self) -> &[u8] {
+        let p = (self as *const Ipv6Addr) as *const u8;
+        unsafe {
+            std::slice::from_raw_parts(p, std::mem::size_of::<Ipv4Addr>())
+        }
+    }
 }
 
 ///
@@ -78,6 +98,9 @@ pub trait Prefixable {
 
     /// Construct a prefix from common parts of two prefixes.
     fn from_common(prefix1: &Self, prefix2: &Self) -> Self;
+
+    /// Return byte length of prefix.
+    fn bytelen(&self) -> u8;
 
     /// Return prefix length.
     fn len(&self) -> u8;
@@ -219,6 +242,10 @@ pub struct Prefix<T> {
 
 // 
 impl<T: AddressLen + Clone> Prefixable for Prefix<T> {
+    fn bytelen(&self) -> u8 {
+        size_of::<T>() as u8
+    }
+
     /// Construct a prefix from given prefix.
     fn from_prefix(p: &Self) -> Self {
         Self {
@@ -412,7 +439,7 @@ pub fn prefix_ipv4_from(addr_str: &str, mask_str: &str) -> Result<Prefix<Ipv4Add
                 Err(_) => Err(PrefixParseError(())),
                 Ok(mask) => {
                     let mask = u32::from(mask);
-                    Ok(Prefix::<Ipv4Addr>::from(addr, (32 - mask.leading_zeros()) as u8))
+                    Ok(Prefix::<Ipv4Addr>::from(addr, (32 - mask.trailing_zeros()) as u8))
                 },
             }
         }
