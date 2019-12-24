@@ -12,15 +12,21 @@ use std::str::FromStr;
 use std::error::Error;
 use std::fmt;
     
-const IPV4_MAX_BITS_LEN: u8 = 32;
-const IPV6_MAX_BITS_LEN: u8 = 128;
+const IPV4_BIT_LENGTH: u8 = 32;
+const IPV6_BIT_LENGTH: u8 = 128;
 
 ///
-/// Trait to extend IpAddr.
+/// Trait Addressable to extend IpAddr.
 ///
-pub trait AddressLen {
-    /// Return address length in bits.
-    fn address_len() -> u8;
+pub trait Addressable {
+
+    /// Return address bit length.
+    fn bit_len() -> u8;
+
+    /// Return address byte length.
+    fn byte_len() -> u8 {
+        Self::bit_len() / 8
+    }
 
     /// Construct address with all 0s.
     fn empty_new() -> Self;
@@ -33,10 +39,11 @@ pub trait AddressLen {
 }
 
 /// Trait implementation for Ipv4Addr.
-impl AddressLen for Ipv4Addr {
-    /// Return address length in bits.
-    fn address_len() -> u8 {
-        IPV4_MAX_BITS_LEN
+impl Addressable for Ipv4Addr {
+
+    /// Return address bit length.
+    fn bit_len() -> u8 {
+        IPV4_BIT_LENGTH
     }
 
     /// Construct address with all 0s.
@@ -61,10 +68,11 @@ impl AddressLen for Ipv4Addr {
 }
 
 /// Trait implementation for Ipv6Addr.
-impl AddressLen for Ipv6Addr {
-    /// Return address length in bits.
-    fn address_len() -> u8 {
-        IPV6_MAX_BITS_LEN
+impl Addressable for Ipv6Addr {
+
+    /// Return address bit length.
+    fn bit_len() -> u8 {
+        IPV6_BIT_LENGTH
     }
 
     /// Construct address with all 0s.
@@ -93,6 +101,7 @@ impl AddressLen for Ipv6Addr {
 /// Trait Prefixable.
 ///
 pub trait Prefixable {
+
     /// Construct a prefix from given prefix.
     fn from_prefix(p: &Self) -> Self;
 
@@ -231,7 +240,7 @@ fn slice_copy_u32(s: &mut [u8], v: u32, i: usize) {
 ///
 /// IP Prefix.
 ///
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Prefix<T> {
     // IP Address.
     address: T,
@@ -241,7 +250,7 @@ pub struct Prefix<T> {
 }
 
 // 
-impl<T: AddressLen + Clone> Prefixable for Prefix<T> {
+impl<T: Addressable + Clone> Prefixable for Prefix<T> {
     fn bytelen(&self) -> u8 {
         size_of::<T>() as u8
     }
@@ -262,7 +271,7 @@ impl<T: AddressLen + Clone> Prefixable for Prefix<T> {
         let mut j = 0u8;
         let mut pcommon = Self { address: T::empty_new(), len: 0 };
         let px = pcommon.octets_mut();
-        let bytes = T::address_len() / 8;
+        let bytes = T::bit_len() / 8;
 
         while i < bytes {
             let l1: u32 = slice_get_u32(p1, i as usize);
@@ -320,7 +329,10 @@ impl<T: AddressLen + Clone> Prefixable for Prefix<T> {
 ///
 /// Abstract IPv4 and IPv6 both.
 ///
-impl<T: AddressLen + FromStr> Prefix<T> {
+impl<T> Prefix<T>
+where T: Addressable + FromStr
+{
+
     /// Construct empty prefix.
     pub fn new() -> Self {
         Self {
@@ -351,12 +363,12 @@ impl<T: AddressLen + FromStr> Prefix<T> {
             // Address with prefix length.
             Some(pos) => {
                 match s[pos + 1..].parse::<u8>() {
-                    Ok(prefix_len) if prefix_len <= T::address_len() => (pos, prefix_len),
+                    Ok(prefix_len) if prefix_len <= T::bit_len() => (pos, prefix_len),
                     _ => return Err(PrefixParseError(())),
                 }
             },
             // Consider host address.
-            None => (s.len(), T::address_len()),
+            None => (s.len(), T::bit_len()),
         };
                     
         let address_str = &s[..pos];
@@ -380,7 +392,7 @@ impl<T: AddressLen + FromStr> Prefix<T> {
 impl Prefix<Ipv4Addr> {
     /// Apply network mask to address part.
     pub fn apply_mask(&mut self) {
-        if self.len < Ipv4Addr::address_len() {
+        if self.len < Ipv4Addr::bit_len() {
             let octets = self.address().octets();
             let mask = &PLEN2MASK[self.len as usize];
             self.address = Ipv4Addr::new(octets[0] & mask[0],
@@ -410,7 +422,7 @@ impl Prefix<Ipv6Addr> {
             }
         }
 
-        if self.len < Ipv6Addr::address_len() {
+        if self.len < Ipv6Addr::bit_len() {
             let segments = self.address().segments();
             self.address = Ipv6Addr::new(segments[0] & mask4segment(0, self.len),
                                          segments[1] & mask4segment(1, self.len),
@@ -424,7 +436,9 @@ impl Prefix<Ipv6Addr> {
     }
 }
 
-impl<T: AddressLen + ToString> fmt::Display for Prefix<T> {
+impl<T> fmt::Display for Prefix<T>
+where T: Addressable + ToString
+{
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         write!(fmt, "{}/{}", self.address.to_string(), self.len)
     }
