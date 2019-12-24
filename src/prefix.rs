@@ -108,9 +108,6 @@ pub trait Prefixable {
     /// Construct a prefix from common parts of two prefixes.
     fn from_common(prefix1: &Self, prefix2: &Self) -> Self;
 
-    /// Return byte length of prefix.
-    fn bytelen(&self) -> u8;
-
     /// Return prefix length.
     fn len(&self) -> u8;
 
@@ -249,11 +246,8 @@ pub struct Prefix<T> {
     len: u8,
 }
 
-// 
+
 impl<T: Addressable + Clone> Prefixable for Prefix<T> {
-    fn bytelen(&self) -> u8 {
-        size_of::<T>() as u8
-    }
 
     /// Construct a prefix from given prefix.
     fn from_prefix(p: &Self) -> Self {
