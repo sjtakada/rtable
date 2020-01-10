@@ -5,7 +5,6 @@
 // IP Prefix - abstract IPv? address and prefix length.
 //
 
-use std::mem::size_of;
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
 use std::str::FromStr;
