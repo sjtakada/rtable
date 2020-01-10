@@ -60,60 +60,12 @@ impl<P: Prefixable, D> Tree<P, D> {
 
     /// Get node with given prefix, create one if it doesn't exist.
     pub fn get_node(&mut self, prefix: &P) -> NodeIterator<P, D> {
-        let mut matched: Option<Rc<Node<P, D>>> = None;
-        let mut curr: Option<Rc<Node<P, D>>> = self.top.clone();
-        let mut new_node: Rc<Node<P, D>>;
-
-        while node_match_prefix(curr.clone(), prefix) {
-            let node = curr.clone().unwrap();
-            if node.prefix().len() == prefix.len() {
-                return NodeIterator::from_node(node)
-            }
-
-            matched = Some(node.clone());
-            curr = node.child_with(prefix.bit_at(node.prefix().len()));
-        }
-
-        match curr.clone() {
-            None => {
-                new_node = Rc::new(Node::new(prefix));
-                match matched {
-                    Some(node) => {
-                        Node::<P, D>::set_child(node, new_node.clone());
-                    },
-                    None => {
-                        self.top.replace(new_node.clone());
-                    }
-                }
-
-            },
-            Some(node) => {
-                new_node = Rc::new(Node::from_common(node.prefix(), prefix));
-                Node::<P, D>::set_child(new_node.clone(), node);
-
-                match matched {
-                    Some(node) => {
-                        Node::<P, D>::set_child(node, new_node.clone());
-                    },
-                    None => {
-                        self.top.replace(new_node.clone());
-                    }
-                }
-
-                if new_node.prefix().len() != prefix.len() {
-                    matched = Some(new_node.clone());
-                    new_node = Rc::new(Node::new(prefix));
-                    Node::<P, D>::set_child(matched.unwrap().clone(), new_node.clone());
-                }
-            }
-        }
-
-        NodeIterator::from_node(new_node)
+        self.get_node_ctor(prefix, None::<Box<dyn Fn() -> D>>)
     }
 
     /// Get node with given prefix, create one if it doesn't exist.
     /// And also construct 'D' with given constructor.
-    pub fn get_node_ctor<F>(&mut self, prefix: &P, ctor: F) -> NodeIterator<P, D>
+    pub fn get_node_ctor<F>(&mut self, prefix: &P, ctor: Option<F>) -> NodeIterator<P, D>
         where F: Fn() -> D
     {
         let mut matched: Option<Rc<Node<P, D>>> = None;
@@ -164,7 +116,9 @@ impl<P: Prefixable, D> Tree<P, D> {
             }
         }
 
-        new_node.set_data(ctor());
+        if let Some(ctor) = ctor {
+            new_node.set_data(ctor());
+        }
         NodeIterator::from_node(new_node)
     }
 
