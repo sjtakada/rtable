@@ -1,6 +1,6 @@
 //
 // Routing Table
-//   Copyright (C) 2019 Toshiaki Takada
+//   Copyright (C) 2019,2020 Toshiaki Takada
 //
 // IP Prefix - abstract IPv? address and prefix length.
 //
@@ -238,6 +238,7 @@ fn slice_copy_u32(s: &mut [u8], v: u32, i: usize) {
 ///
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Prefix<T> {
+
     // IP Address.
     address: T,
 
