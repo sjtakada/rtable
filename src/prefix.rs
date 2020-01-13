@@ -8,6 +8,7 @@
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
 use std::str::FromStr;
+use std::hash::Hash;
 use std::error::Error;
 use std::fmt;
     
@@ -17,8 +18,14 @@ const IPV6_BIT_LENGTH: u8 = 128;
 ///
 /// Trait Addressable to extend IpAddr.
 ///
-pub trait Addressable {
-
+pub trait Addressable
+where Self: Clone,
+      Self: FromStr,
+      Self: ToString,
+      Self: Hash,
+      Self: Eq,
+      Self: fmt::Debug,
+{
     /// Return address bit length.
     fn bit_len() -> u8;
 
@@ -237,7 +244,7 @@ fn slice_copy_u32(s: &mut [u8], v: u32, i: usize) {
 /// IP Prefix.
 ///
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Prefix<T> {
+pub struct Prefix<T: Addressable> {
 
     // IP Address.
     address: T,
@@ -247,7 +254,7 @@ pub struct Prefix<T> {
 }
 
 
-impl<T: Addressable + Clone> Prefixable for Prefix<T> {
+impl<T: Addressable> Prefixable for Prefix<T> {
 
     /// Construct a prefix from given prefix.
     fn from_prefix(p: &Self) -> Self {
@@ -323,8 +330,7 @@ impl<T: Addressable + Clone> Prefixable for Prefix<T> {
 ///
 /// Abstract IPv4 and IPv6 both.
 ///
-impl<T> Prefix<T>
-where T: Addressable + FromStr
+impl<T: Addressable> Prefix<T>
 {
 
     /// Construct empty prefix.
@@ -430,8 +436,7 @@ impl Prefix<Ipv6Addr> {
     }
 }
 
-impl<T> fmt::Display for Prefix<T>
-where T: Addressable + ToString
+impl<T: Addressable> fmt::Display for Prefix<T>
 {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         write!(fmt, "{}/{}", self.address.to_string(), self.len)
