@@ -118,6 +118,7 @@ impl<P: Prefixable, D> Tree<P, D> {
 
         if let Some(ctor) = ctor {
             new_node.set_data(ctor());
+            self.count += 1;
         }
         NodeIterator::from_node(new_node)
     }
